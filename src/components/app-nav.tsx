@@ -279,6 +279,43 @@ export function AppNav({
 
   const profileActive = pathname === "/profile" || pathname.startsWith("/profile/");
 
+  const shortcutsList = (
+    <ul className="space-y-1.5">
+      {(
+        isGuest
+          ? [
+              { keys: ["Space"], label: "Play / pause" },
+              { keys: ["↑", "↓"], label: "Prev / next" },
+              { keys: ["←", "→"], label: "Seek ±10s" },
+            ]
+          : [
+              { keys: ["Space"], label: "Play / pause" },
+              { keys: ["↑", "↓"], label: "Prev / next" },
+              { keys: ["←", "→"], label: "Seek ±10s" },
+              { keys: ["P"], label: "Quick-add to playlist" },
+              { keys: ["L"], label: "Choose / create playlist" },
+            ]
+      ).map((row) => (
+        <li
+          key={row.label}
+          className="flex items-start justify-between gap-2 rounded-md px-1 py-0.5 text-[11px] leading-snug text-[var(--ink-dim)]"
+        >
+          <span className="min-w-0 flex-1 break-words">{row.label}</span>
+          <span className="flex shrink-0 items-center gap-0.5 pt-px">
+            {row.keys.map((key) => (
+              <kbd
+                key={key}
+                className="inline-flex min-w-[1.35rem] items-center justify-center rounded border border-[var(--line)] bg-[rgba(0,0,0,0.28)] px-1 py-0.5 font-sans text-[10px] font-medium tabular-nums text-[var(--ink-muted)]"
+              >
+                {key}
+              </kbd>
+            ))}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+
   async function signOut() {
     setSigningOut(true);
     clearAudioPlayer();
@@ -402,59 +439,43 @@ export function AppNav({
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex-1 overflow-y-auto py-3">
+        <div className="shrink-0 py-3">
           <NavLinks onNavigate={() => setMobileOpen(false)} />
-
-          <div className={`border-t border-[var(--line)] px-3 pt-4 ${items.length ? "mt-5" : ""}`}>
-            <div className="mb-2 px-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
-              Shortcuts
-            </div>
-            <ul className="space-y-1">
-              {(
-                isGuest
-                  ? [
-                      { keys: ["Space"], label: "Play / pause" },
-                      { keys: ["↑", "↓"], label: "Prev / next" },
-                      { keys: ["←", "→"], label: "Seek ±10s" },
-                    ]
-                  : [
-                      { keys: ["Space"], label: "Play / pause" },
-                      { keys: ["↑", "↓"], label: "Prev / next" },
-                      { keys: ["←", "→"], label: "Seek ±10s" },
-                      { keys: ["P"], label: "Quick-add to playlist" },
-                      { keys: ["L"], label: "Choose / create playlist" },
-                    ]
-              ).map((row) => (
-                <li
-                  key={row.label}
-                  className="flex items-center justify-between gap-2 rounded-md px-1 py-0.5 text-[11px] text-[var(--ink-dim)]"
-                >
-                  <span className="min-w-0 truncate">{row.label}</span>
-                  <span className="flex shrink-0 items-center gap-0.5">
-                    {row.keys.map((key) => (
-                      <kbd
-                        key={key}
-                        className="inline-flex min-w-[1.35rem] items-center justify-center rounded border border-[var(--line)] bg-[rgba(0,0,0,0.28)] px-1 py-0.5 font-sans text-[10px] font-medium tabular-nums text-[var(--ink-muted)]"
-                      >
-                        {key}
-                      </kbd>
-                    ))}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
 
         {showCollapse ? (
           <button
             type="button"
             onClick={() => setNavOpenPersist(false)}
-            className="min-h-6 flex-1 cursor-default border-0 bg-transparent"
+            className="min-h-6 w-full flex-1 cursor-default border-0 bg-transparent"
             aria-label="Collapse navigation"
             title="Click to hide navigation"
           />
-        ) : null}
+        ) : (
+          <div className="min-h-6 flex-1" aria-hidden />
+        )}
+
+        {showCollapse ? (
+          <button
+            type="button"
+            onClick={() => setNavOpenPersist(false)}
+            className="w-full shrink-0 cursor-default border-t border-[var(--line)] px-3 py-3 text-left transition hover:bg-[rgba(255,255,255,0.02)]"
+            aria-label="Collapse navigation"
+            title="Click to hide navigation"
+          >
+            <div className="mb-2 px-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
+              Shortcuts
+            </div>
+            <div className="pointer-events-none">{shortcutsList}</div>
+          </button>
+        ) : (
+          <div className="shrink-0 border-t border-[var(--line)] px-3 py-3">
+            <div className="mb-2 px-1 text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
+              Shortcuts
+            </div>
+            {shortcutsList}
+          </div>
+        )}
       </div>
 
       <div className="border-t border-[var(--line)] p-3">
