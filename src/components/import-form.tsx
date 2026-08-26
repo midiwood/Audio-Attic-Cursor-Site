@@ -28,7 +28,7 @@ import {
 import {
   extractDropboxLinks,
   filenameFromDropboxUrl,
-  isMp3AudioUrl,
+  isAllowedImportAudioUrl,
   normalizeLicenseStatus,
   titleFromFilename,
   titleFromDropboxUrl,
@@ -43,6 +43,8 @@ import type { CatalogVocabulary } from "@/lib/vocabulary";
 type DraftTrack = {
   clientId: string;
   dropboxLink: string;
+  /** Dropbox path from resolve-link (original file). */
+  sourceDropboxPath?: string;
   workingTitle: string;
   libraryTitle: string;
   description: string;
@@ -658,7 +660,11 @@ export function ImportForm({
       const byId = new Map(withDuration.map((track) => [track.clientId, track]));
       return prev.map((track) => byId.get(track.clientId) ?? track);
     });
-    void submitForAi(withDuration, { force: true, titleMode: opts?.titleMode ?? multiTitleMode });
+    // Single-track auto-AI invents a library title (same as single Dropbox link).
+    // Multi keeps the last multi-batch choice (cleanup by default).
+    const titleMode =
+      opts?.titleMode ?? (tracks.length === 1 ? "creative" : multiTitleMode);
+    void submitForAi(withDuration, { force: true, titleMode });
   }
 
   function proceedDespiteHardDup() {
@@ -690,45 +696,55 @@ export function ImportForm({
       setError("Paste at least one Dropbox link");
       return;
     }
-    const mp3Links = links.filter((link) => isMp3AudioUrl(link));
-    if (!mp3Links.length) {
-      setError("Only MP3 Dropbox links are accepted for now");
+    const audioLinks = links.filter((link) => isAllowedImportAudioUrl(link));
+    if (!audioLinks.length) {
+      setError("Only MP3 or WAV Dropbox links are accepted");
       return;
     }
-    if (mp3Links.length < links.length) {
+    if (audioLinks.length < links.length) {
       setError(
-        `Skipped ${links.length - mp3Links.length} non-MP3 link${links.length - mp3Links.length === 1 ? "" : "s"} — only MP3 is accepted`,
+        `Skipped ${links.length - audioLinks.length} non-audio link${links.length - audioLinks.length === 1 ? "" : "s"} — only MP3/WAV is accepted`,
       );
     }
-    if (mp3Links.length > 1) {
+    if (audioLinks.length > 1) {
       setAiPending(true);
       setAiOptionsPrompt({
-        trackCount: mp3Links.length,
-        pendingInput: { kind: "links", links: mp3Links },
+        trackCount: audioLinks.length,
+        pendingInput: { kind: "links", links: audioLinks },
       });
       return;
     }
-    queueFromLinks(mp3Links, { titleMode: "creative" });
+    queueFromLinks(audioLinks, { titleMode: "creative" });
   }
 
   async function resolveFiles(
     files: FileList | File[],
     opts?: { skipPrompt?: boolean; titleMode?: "keep" | "cleanup" | "creative" },
   ) {
-    const list = [...files].filter((file) =>
-      /\.mp3$/i.test(file.name) || file.type === "audio/mpeg" || file.type === "audio/mp3",
+    const list = [...files].filter(
+      (file) =>
+        /\.(mp3|wav)$/i.test(file.name) ||
+        file.type === "audio/mpeg" ||
+        file.type === "audio/mp3" ||
+        file.type === "audio/wav" ||
+        file.type === "audio/x-wav",
     );
     if (!list.length) {
-      setError("Only MP3 files are accepted for now");
+      setError("Only MP3 or WAV files are accepted");
       return;
     }
 
     const rejected = [...files].filter(
-      (file) => !/\.mp3$/i.test(file.name) && file.type !== "audio/mpeg" && file.type !== "audio/mp3",
+      (file) =>
+        !/\.(mp3|wav)$/i.test(file.name) &&
+        file.type !== "audio/mpeg" &&
+        file.type !== "audio/mp3" &&
+        file.type !== "audio/wav" &&
+        file.type !== "audio/x-wav",
     );
     if (rejected.length) {
       setError(
-        `Skipped ${rejected.length} non-MP3 file${rejected.length === 1 ? "" : "s"} — only MP3 is accepted`,
+        `Skipped ${rejected.length} non-audio file${rejected.length === 1 ? "" : "s"} — only MP3/WAV is accepted`,
       );
     } else {
       setError("");
@@ -749,7 +765,7 @@ export function ImportForm({
     for (const file of list) {
       const localPreviewUrl = URL.createObjectURL(file);
       let res: Response;
-      let data: { error?: string; dropboxLink?: string } = {};
+      let data: { error?: string; dropboxLink?: string; path?: string } = {};
       try {
         res = await fetch("/api/dropbox/resolve-link", {
           method: "POST",
@@ -798,6 +814,7 @@ export function ImportForm({
 
       created.push({
         ...emptyDraft(String(data.dropboxLink || ""), file.name),
+        sourceDropboxPath: data.path?.trim() || undefined,
         localPreviewUrl,
         duration,
       });
@@ -1147,6 +1164,7 @@ export function ImportForm({
           derivedFrom: isSingle ? derivedFrom : [],
           tracks: drafts.map((track) => ({
             dropboxLink: track.dropboxLink,
+            sourceDropboxPath: track.sourceDropboxPath || "",
             workingTitle: track.workingTitle,
             libraryTitle: track.libraryTitle,
             description: track.description || shared.description || "",
@@ -1315,10 +1333,10 @@ export function ImportForm({
           }`}
         >
           <p className="text-sm font-medium text-[var(--ink)]">
-            {statusLabel || "Drop MP3s from Dropbox"}
+            {statusLabel || "Drop MP3 or WAV from Dropbox"}
           </p>
           <p className="mt-1 text-xs text-[var(--ink-dim)]">
-            1 track = AI runs automatically · multiple = shared manual tags
+            1 track = AI runs automatically · multiple = shared manual tags · vault stores −16 LUFS MP3
           </p>
           <button
             type="button"
@@ -1331,7 +1349,7 @@ export function ImportForm({
           <input
             ref={fileInputRef}
             type="file"
-            accept="audio/mpeg,.mp3"
+            accept="audio/mpeg,audio/wav,.mp3,.wav"
             multiple
             className="hidden"
             onChange={(e) => {

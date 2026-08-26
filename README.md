@@ -33,7 +33,8 @@ Also set `BETTER_AUTH_SECRET` (or `SESSION_SECRET`) and `BETTER_AUTH_URL`.
 - `GEMINI_MODEL` — optional (default `gemini-3.6-flash`)
 - `DROPBOX_APP_KEY` / `DROPBOX_APP_SECRET` / `DROPBOX_REFRESH_TOKEN` — long-term Dropbox API access (recommended)
 - `DROPBOX_ACCESS_TOKEN` — optional short-lived fallback (~4h) while migrating
-- `DROPBOX_UPLOAD_FOLDER` — unused for lookup (kept optional)
+- `DROPBOX_UPLOAD_FOLDER` — vault root for durable −16 LUFS MP3 copies (default `/_Business/Audio Attic/Vault`)
+- Retrospective vault copy: `npm run dropbox:vault-migrate -- --dry-run` then `--apply`
 
 Auto-tag prefers audio from dropped local files; otherwise it fetches audio from the Dropbox link. Tags are constrained to your existing catalog vocabulary.
 

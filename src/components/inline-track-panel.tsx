@@ -197,7 +197,7 @@ function LineageNeighborDetail({ trackId }: { trackId: string }) {
         </dl>
       </div>
       {item.dropboxLink ? (
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap gap-3">
           <a
             href={item.dropboxLink}
             target="_blank"
@@ -206,6 +206,17 @@ function LineageNeighborDetail({ trackId }: { trackId: string }) {
           >
             Open in Dropbox →
           </a>
+          {item.sourceFolderLink ? (
+            <a
+              href={item.sourceFolderLink}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-[var(--ink-dim)] transition hover:text-[var(--accent)]"
+              title={item.sourceDropboxPath || undefined}
+            >
+              Original folder →
+            </a>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -378,6 +389,17 @@ function InlineTrackView({
                 className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
               >
                 Open in Dropbox
+              </a>
+            ) : null}
+            {track.sourceFolderLink ? (
+              <a
+                href={track.sourceFolderLink}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                title={track.sourceDropboxPath || undefined}
+              >
+                Original folder
               </a>
             ) : null}
           </div>

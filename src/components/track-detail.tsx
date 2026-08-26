@@ -85,6 +85,17 @@ export function TrackDetail({ track, queue }: { track: Track; queue: PlayerTrack
               Open in Dropbox
             </a>
           ) : null}
+          {track.sourceFolderLink ? (
+            <a
+              href={track.sourceFolderLink}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-lg border border-[var(--line)] px-5 py-3 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
+              title={track.sourceDropboxPath || undefined}
+            >
+              Original folder
+            </a>
+          ) : null}
         </div>
       </div>
 

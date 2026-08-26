@@ -150,12 +150,12 @@ export function normalizeMusicalKey(value: string | null | undefined): string {
 export function nextTrackId(existingIds: string[]): string {
   let max = 0;
   for (const id of existingIds) {
-    const match = /^id(\d+)$/i.exec(id.trim());
+    const match = /^(?:id|rjv)(\d+)$/i.exec(id.trim());
     if (match) {
       max = Math.max(max, Number.parseInt(match[1], 10));
     }
   }
-  return `id${String(max + 1).padStart(4, "0")}`;
+  return `rjv${String(max + 1).padStart(4, "0")}`;
 }
 
 export function filenameFromDropboxUrl(url: string): string {
@@ -205,7 +205,7 @@ export function audioFileTypeFromUrls(
   return null;
 }
 
-/** Catalog currently streams MP3 only — reject other extensions on ingest. */
+/** True if any URL/filename looks like an MP3. */
 export function isMp3AudioUrl(...urls: Array<string | null | undefined>): boolean {
   for (const url of urls) {
     if (!url?.trim()) continue;
@@ -215,8 +215,23 @@ export function isMp3AudioUrl(...urls: Array<string | null | undefined>): boolea
   return false;
 }
 
+/** Import accepts MP3 or WAV (WAV is normalized to vault MP3 on ingest). */
+export function isAllowedImportAudioUrl(...urls: Array<string | null | undefined>): boolean {
+  for (const url of urls) {
+    if (!url?.trim()) continue;
+    const name = (filenameFromDropboxUrl(url) || url).toLowerCase();
+    if (/\.(mp3|wav)(?:$|\?)/i.test(name) || /\.(mp3|wav)$/i.test(name)) return true;
+  }
+  return false;
+}
+
 export function mp3OnlyErrorMessage() {
-  return "Only MP3 files are accepted for now";
+  return "Only MP3 or WAV files are accepted";
+}
+
+/** @deprecated use mp3OnlyErrorMessage — kept for call sites */
+export function allowedImportAudioErrorMessage() {
+  return mp3OnlyErrorMessage();
 }
 
 export function formatDisplayTitle(track: {

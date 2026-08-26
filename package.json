@@ -11,8 +11,10 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:backfill-composers": "tsx scripts/backfill-composers.ts",
     "db:normalize-vocab": "tsx scripts/normalize-vocabulary.ts",
+    "db:migrate-ids-rjv": "tsx scripts/migrate-track-ids-to-rjv.ts",
     "seed": "tsx scripts/seed-from-sheet.ts",
-    "dropbox:oauth": "node scripts/dropbox-oauth.mjs"
+    "dropbox:oauth": "node scripts/dropbox-oauth.mjs",
+    "dropbox:vault-migrate": "tsx scripts/migrate-to-vault.ts"
   },
   "dependencies": {
     "@wavesurfer/react": "^1.0.12",

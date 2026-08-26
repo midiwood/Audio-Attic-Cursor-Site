@@ -6,7 +6,7 @@ import {
   formatDropboxApiError,
   withDropboxToken,
 } from "@/lib/dropbox-auth";
-import { isMp3AudioUrl, mp3OnlyErrorMessage } from "@/lib/tracks";
+import { isAllowedImportAudioUrl, mp3OnlyErrorMessage } from "@/lib/tracks";
 
 export const runtime = "nodejs";
 
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "filename is required" }, { status: 400 });
   }
 
-  if (!isMp3AudioUrl(filename) && !/\.mp3$/i.test(filename)) {
+  if (!isAllowedImportAudioUrl(filename) && !/\.(mp3|wav)$/i.test(filename)) {
     return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
   }
 

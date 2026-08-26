@@ -25,6 +25,9 @@ export type TrackListItem = {
   licenseExpires: string | null;
   dropboxLink: string | null;
   dropboxDl: string | null;
+  dropboxPath?: string | null;
+  sourceDropboxPath?: string | null;
+  sourceFolderLink?: string | null;
   /** Server-resolved SAMRO rights holders (IPI + custom perf shares). */
   composerSlots?: Array<{
     name: string;
@@ -61,6 +64,9 @@ export function toTrackListItem(track: {
   licenseExpires?: string | null;
   dropboxLink?: string | null;
   dropboxDl: string | null;
+  dropboxPath?: string | null;
+  sourceDropboxPath?: string | null;
+  sourceFolderLink?: string | null;
 }): TrackListItem {
   return {
     id: track.id,
@@ -89,5 +95,8 @@ export function toTrackListItem(track: {
     licenseExpires: track.licenseExpires ?? null,
     dropboxLink: track.dropboxLink ?? null,
     dropboxDl: track.dropboxDl,
+    dropboxPath: track.dropboxPath ?? null,
+    sourceDropboxPath: track.sourceDropboxPath ?? null,
+    sourceFolderLink: track.sourceFolderLink ?? null,
   };
 }

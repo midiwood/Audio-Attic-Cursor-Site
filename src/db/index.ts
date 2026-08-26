@@ -24,6 +24,9 @@ CREATE TABLE IF NOT EXISTS tracks (
   date TEXT,
   dropbox_link TEXT,
   dropbox_dl TEXT,
+  dropbox_path TEXT,
+  source_dropbox_path TEXT,
+  source_folder_link TEXT,
   working_title TEXT,
   library_title TEXT,
   client TEXT,
@@ -269,6 +272,24 @@ try {
 
 try {
   sqlite.exec(`ALTER TABLE tracks ADD COLUMN project TEXT`);
+} catch {
+  // column already exists
+}
+
+try {
+  sqlite.exec(`ALTER TABLE tracks ADD COLUMN dropbox_path TEXT`);
+} catch {
+  // column already exists
+}
+
+try {
+  sqlite.exec(`ALTER TABLE tracks ADD COLUMN source_dropbox_path TEXT`);
+} catch {
+  // column already exists
+}
+
+try {
+  sqlite.exec(`ALTER TABLE tracks ADD COLUMN source_folder_link TEXT`);
 } catch {
   // column already exists
 }

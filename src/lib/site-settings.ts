@@ -116,8 +116,8 @@ export function getDropboxRuntimeConfig() {
     refreshToken: resolveSetting(SETTINGS.DROPBOX_REFRESH_TOKEN),
     accessToken: resolveSetting(SETTINGS.DROPBOX_ACCESS_TOKEN),
     uploadFolder:
-      resolveSetting(SETTINGS.DROPBOX_UPLOAD_FOLDER, "/Audio Attic Imports") ||
-      "/Audio Attic Imports",
+      resolveSetting(SETTINGS.DROPBOX_UPLOAD_FOLDER, "/_Business/Audio Attic/Vault") ||
+      "/_Business/Audio Attic/Vault",
   };
 }
 
@@ -193,8 +193,8 @@ export function getDropboxSettingsView() {
     uploadFolder: {
       ...getSettingFieldStatus(SETTINGS.DROPBOX_UPLOAD_FOLDER),
       displayValue:
-        resolveSetting(SETTINGS.DROPBOX_UPLOAD_FOLDER, "/Audio Attic Imports") ||
-        "/Audio Attic Imports",
+        resolveSetting(SETTINGS.DROPBOX_UPLOAD_FOLDER, "/_Business/Audio Attic/Vault") ||
+        "/_Business/Audio Attic/Vault",
     },
   };
 }

@@ -13,6 +13,12 @@ export const tracks = sqliteTable(
     date: text("date"),
     dropboxLink: text("dropbox_link"),
     dropboxDl: text("dropbox_dl"),
+    /** Vault path for playback MP3, e.g. /_Business/Audio Attic/Vault/{id}/track.mp3 */
+    dropboxPath: text("dropbox_path"),
+    /** Original file path in Dropbox before vault copy (if known). */
+    sourceDropboxPath: text("source_dropbox_path"),
+    /** Shared link to the original file's parent folder (admin provenance). */
+    sourceFolderLink: text("source_folder_link"),
     workingTitle: text("working_title"),
     libraryTitle: text("library_title"),
     client: text("client"),

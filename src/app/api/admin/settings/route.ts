@@ -33,6 +33,19 @@ export async function POST(req: NextRequest) {
     values[key as SettingKey] = String(value ?? "");
   }
 
+  if (SETTINGS.DROPBOX_APP_KEY in values) {
+    const appKey = String(values[SETTINGS.DROPBOX_APP_KEY] || "").trim();
+    if (appKey && (/@/.test(appKey) || /\s/.test(appKey))) {
+      return NextResponse.json(
+        {
+          error:
+            "Dropbox App key looks invalid (not an email). Paste the App key from the Dropbox App Console.",
+        },
+        { status: 400 },
+      );
+    }
+  }
+
   const clear = clearIn.filter((key): key is SettingKey => ALLOWED.has(key));
 
   applySettingUpdates({ values, clear });

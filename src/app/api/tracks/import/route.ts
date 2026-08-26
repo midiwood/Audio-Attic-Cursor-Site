@@ -15,13 +15,17 @@ import {
   parseYear,
   titleFromDropboxUrl,
   titleFromFilename,
-  toDropboxDlUrl,
-  isMp3AudioUrl,
+  isAllowedImportAudioUrl,
   mp3OnlyErrorMessage,
 } from "@/lib/tracks";
 import { isTrackRelationType, type DerivedFromLink } from "@/lib/track-relations";
 import { constrainToVocabulary } from "@/lib/vocabulary";
 import { ensureTrackWaveforms } from "@/lib/waveform-generate";
+import {
+  dropboxAuthConfigured,
+  dropboxAuthSetupMessage,
+} from "@/lib/dropbox-auth";
+import { ingestTrackToVault } from "@/lib/vault-ingest";
 import {
   formatArtistFromComposers,
   getComposerById,
@@ -86,6 +90,7 @@ export async function POST(req: NextRequest) {
     workingTitle?: string;
     libraryTitle?: string;
     dropboxLink?: string;
+    sourceDropboxPath?: string;
     duration?: string;
     description?: string;
     genre?: string;
@@ -100,11 +105,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one track is required" }, { status: 400 });
   }
 
+  if (!dropboxAuthConfigured()) {
+    return NextResponse.json({ error: dropboxAuthSetupMessage() }, { status: 500 });
+  }
+
   for (const track of tracksInput) {
     if (!track.dropboxLink?.trim()) {
       return NextResponse.json({ error: "Each track needs a Dropbox link before import" }, { status: 400 });
     }
-    if (!isMp3AudioUrl(track.dropboxLink)) {
+    if (!isAllowedImportAudioUrl(track.dropboxLink, track.sourceDropboxPath)) {
       return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
     }
   }
@@ -175,9 +184,12 @@ export async function POST(req: NextRequest) {
 
   let created;
   try {
-    created = tracksInput.map((track, index) => {
-      const dropboxLink = track.dropboxLink!.trim();
-      const fallbackTitle = titleFromDropboxUrl(dropboxLink) || ids[index];
+    created = [];
+    for (let index = 0; index < tracksInput.length; index++) {
+      const track = tracksInput[index];
+      const sourceLink = track.dropboxLink!.trim();
+      const sourceDropboxPath = track.sourceDropboxPath?.trim() || null;
+      const fallbackTitle = titleFromDropboxUrl(sourceLink) || ids[index];
       const libraryTitle =
         titleFromFilename(track.libraryTitle?.trim() || "") || fallbackTitle;
       const workingTitle =
@@ -208,11 +220,21 @@ export async function POST(req: NextRequest) {
           )
         : String(shared.artist || "").trim() || "Richard Vossgatter";
 
+      const vault = await ingestTrackToVault({
+        trackId: ids[index],
+        sourceDropboxPath,
+        sourceUrl: sourceLink,
+        sourceHint: sourceDropboxPath || sourceLink || libraryTitle,
+      });
+
       const saved = upsertTrack({
         id: ids[index],
         date: nowDisplay,
-        dropboxLink,
-        dropboxDl: toDropboxDlUrl(dropboxLink),
+        dropboxLink: vault.dropboxLink,
+        dropboxDl: vault.dropboxDl,
+        dropboxPath: vault.dropboxPath,
+        sourceDropboxPath: vault.sourceDropboxPath,
+        sourceFolderLink: vault.sourceFolderLink,
         workingTitle,
         libraryTitle,
         client: catalogClient,
@@ -253,8 +275,8 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      return saved;
-    });
+      created.push(saved);
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : "Import failed";
     return NextResponse.json({ error: message }, { status: 400 });

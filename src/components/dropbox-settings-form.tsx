@@ -64,6 +64,13 @@ export function DropboxSettingsForm({
       [SETTINGS.DROPBOX_APP_KEY]: appKey.trim(),
       [SETTINGS.DROPBOX_UPLOAD_FOLDER]: uploadFolder.trim(),
     };
+    if (appKey.trim() && (/@/.test(appKey) || /\s/.test(appKey.trim()))) {
+      setBusy(false);
+      setError(
+        "App key looks like an email or has spaces. Use the App key from the Dropbox App Console (not your Dropbox login email).",
+      );
+      return;
+    }
     if (appSecret.trim() && !clearSecret) values[SETTINGS.DROPBOX_APP_SECRET] = appSecret.trim();
     if (refreshToken.trim() && !clearRefresh) {
       values[SETTINGS.DROPBOX_REFRESH_TOKEN] = refreshToken.trim();
@@ -117,7 +124,9 @@ export function DropboxSettingsForm({
             App credentials
           </h2>
           <p className="mt-1.5 text-sm text-[var(--ink-dim)]">
-            From the Dropbox App Console. Prefer refresh-token auth for long-term access.
+            From the Dropbox App Console (App key is a short code like{" "}
+            <code className="text-[var(--ink-muted)]">7di2…</code>, not your email). Prefer
+            refresh-token auth for long-term access.
           </p>
         </div>
 
@@ -251,14 +260,18 @@ export function DropboxSettingsForm({
         ) : null}
 
         <label className="block">
-          <span className={labelClass}>Upload folder</span>
+          <span className={labelClass}>Vault folder</span>
           <input
             className={fieldClass}
             value={uploadFolder}
             onChange={(e) => setUploadFolder(e.target.value)}
-            placeholder="/Audio Attic Imports"
+            placeholder="/_Business/Audio Attic/Vault"
           />
           <SourceHint field={initial.uploadFolder} />
+          <p className="mt-1 text-[11px] text-[var(--ink-dim)]">
+            Durable copies land here as{" "}
+            <code className="text-[var(--ink-muted)]">{"{id}/track.mp3"}</code> (−16 LUFS).
+          </p>
         </label>
       </section>
 

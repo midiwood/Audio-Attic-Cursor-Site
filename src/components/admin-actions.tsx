@@ -7,9 +7,7 @@ export function AdminActions({ canManageUsers }: { canManageUsers: boolean }) {
   const router = useRouter();
   const [status, setStatus] = useState("");
   const [missingDuration, setMissingDuration] = useState<number | null>(null);
-  const [loading, setLoading] = useState<"seed" | "duration-waveforms" | "duration-audio" | null>(
-    null,
-  );
+  const [loading, setLoading] = useState<"duration-waveforms" | "duration-audio" | null>(null);
 
   useEffect(() => {
     if (!canManageUsers) return;
@@ -20,20 +18,6 @@ export function AdminActions({ canManageUsers }: { canManageUsers: boolean }) {
       })
       .catch(() => undefined);
   }, [canManageUsers]);
-
-  async function reseed() {
-    setLoading("seed");
-    setStatus("");
-    const res = await fetch("/api/admin/seed", { method: "POST" });
-    const data = await res.json().catch(() => ({}));
-    setLoading(null);
-    if (!res.ok) {
-      setStatus(data.error || "Seed failed");
-      return;
-    }
-    setStatus(`Sheet sync complete: ${data.upserted} tracks upserted.`);
-    router.refresh();
-  }
 
   async function backfillDurations(mode: "waveforms" | "audio") {
     setLoading(mode === "audio" ? "duration-audio" : "duration-waveforms");
@@ -62,38 +46,35 @@ export function AdminActions({ canManageUsers }: { canManageUsers: boolean }) {
 
   if (!canManageUsers) return null;
 
+  if (missingDuration == null || missingDuration <= 0) {
+    if (!status) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-sm text-[var(--ink-muted)]">{status}</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-3">
       <button
         type="button"
-        onClick={reseed}
+        onClick={() => void backfillDurations("waveforms")}
         disabled={loading !== null}
         className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
       >
-        {loading === "seed" ? "Syncing…" : "Re-sync sheet"}
+        {loading === "duration-waveforms"
+          ? "Filling durations…"
+          : `Fill ${missingDuration} missing durations`}
       </button>
-      {missingDuration != null && missingDuration > 0 ? (
-        <>
-          <button
-            type="button"
-            onClick={() => void backfillDurations("waveforms")}
-            disabled={loading !== null}
-            className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
-          >
-            {loading === "duration-waveforms"
-              ? "Filling durations…"
-              : `Fill ${missingDuration} missing durations`}
-          </button>
-          <button
-            type="button"
-            onClick={() => void backfillDurations("audio")}
-            disabled={loading !== null}
-            className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
-          >
-            {loading === "duration-audio" ? "Decoding audio…" : "Decode from audio (slow)"}
-          </button>
-        </>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => void backfillDurations("audio")}
+        disabled={loading !== null}
+        className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
+      >
+        {loading === "duration-audio" ? "Decoding audio…" : "Decode from audio (slow)"}
+      </button>
       {status ? <span className="text-sm text-[var(--ink-muted)]">{status}</span> : null}
     </div>
   );
