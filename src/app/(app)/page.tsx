@@ -126,6 +126,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
               years: facets.years,
               licenses: facets.licenses,
             }}
+            matchCount={total}
             hideLicenseFilter={subscriber}
             showSamroFilter={staff}
           />

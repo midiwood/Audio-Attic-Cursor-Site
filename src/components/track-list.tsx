@@ -251,6 +251,7 @@ export function TrackList({
   prepareSelectAllIndeterminate = false,
   prepareSelectAllBusy = false,
   onPrepareSelectAllToggle,
+  onClearFilters,
 }: {
   tracks: TrackListItem[];
   relationsByTrack?: Record<string, TrackRelationView[]>;
@@ -281,6 +282,8 @@ export function TrackList({
   prepareSelectAllIndeterminate?: boolean;
   prepareSelectAllBusy?: boolean;
   onPrepareSelectAllToggle?: () => void;
+  /** Shown on empty filtered Browse — clears catalog filters. */
+  onClearFilters?: () => void;
 }) {
   const { playTrack, toggle, current, isPlaying, syncQueue } = usePlayer();
   const [expandedId, setExpandedId] = useState<string | null>(() =>
@@ -403,7 +406,19 @@ export function TrackList({
   if (!tracks.length) {
     return (
       <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg-elevated)]/50 px-6 py-16 text-center text-[var(--ink-muted)]">
-        No tracks match these filters.
+        <p>No tracks match these filters.</p>
+        <p className="mt-2 text-sm text-[var(--ink-dim)]">
+          Within a category any match counts; across categories every filter must match.
+        </p>
+        {onClearFilters ? (
+          <button
+            type="button"
+            onClick={onClearFilters}
+            className="mt-4 rounded-lg border border-[var(--line)] px-4 py-2 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
+          >
+            Reset filters
+          </button>
+        ) : null}
       </div>
     );
   }

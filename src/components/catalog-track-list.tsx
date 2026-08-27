@@ -10,7 +10,7 @@ import {
   usePlayer,
 } from "@/components/player-provider";
 import { CATALOG_PAGE_SIZE } from "@/lib/catalog-constants";
-import { saveCatalogFilterQuery } from "@/lib/catalog-filter-storage";
+import { saveCatalogFilterQuery, clearCatalogFilterQuery } from "@/lib/catalog-filter-storage";
 import { DEFAULT_CATALOG_SORT, defaultSortDir, type CatalogSort, type CatalogSortDir } from "@/lib/catalog-sort";
 import type { TrackListItem } from "@/lib/track-list-item";
 import type { TrackRelationView } from "@/lib/track-relations";
@@ -121,6 +121,13 @@ export function CatalogTrackList({
     },
     [router, searchParams],
   );
+
+  const handleClearFilters = useCallback(() => {
+    clearCatalogFilterQuery();
+    startTransition(() => {
+      router.push("/");
+    });
+  }, [router]);
 
   // Reset when SSR seeds / filter query change
   useEffect(() => {
@@ -447,6 +454,7 @@ export function CatalogTrackList({
         onPrepareSelectAllToggle={
           selectionActive ? () => void toggleSelectAllFiltered() : undefined
         }
+        onClearFilters={filterQuery ? handleClearFilters : undefined}
       />
 
       {prepareProMode && samroProfile ? (

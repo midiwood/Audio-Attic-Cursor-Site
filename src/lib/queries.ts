@@ -349,6 +349,8 @@ export function catalogSearchTokens(raw: string): string[] {
 
 function tokenMatchesTrack(token: string): SQL {
   const term = `%${token}%`;
+  // Wide recall: one remembered word can hit anywhere on the track record.
+  // Facets still AND on top when chips are set.
   return or(
     like(tracks.libraryTitle, term),
     like(tracks.workingTitle, term),
@@ -357,11 +359,18 @@ function tokenMatchesTrack(token: string): SQL {
     like(tracks.client, term),
     like(tracks.project, term),
     like(tracks.artist, term),
-    like(tracks.id, term),
+    like(tracks.publisher, term),
     like(tracks.genre, term),
     like(tracks.mood, term),
     like(tracks.instruments, term),
     like(tracks.attributes, term),
+    like(tracks.musicalKey, term),
+    like(tracks.license, term),
+    like(tracks.licenseDetail, term),
+    like(tracks.samro, term),
+    like(tracks.id, term),
+    sql`cast(${tracks.year} as text) like ${term}`,
+    sql`cast(${tracks.bpm} as text) like ${term}`,
   )!;
 }
 

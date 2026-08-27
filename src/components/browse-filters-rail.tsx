@@ -26,7 +26,8 @@ export function BrowseFiltersRail({ children }: { children: ReactNode }) {
     if (license && license !== "all") count += 1;
     const samro = params.get("samro");
     if (samro === "yes" || samro === "no" || samro === "prepare") count += 1;
-    for (const key of ["genre", "mood", "instrument", "attribute", "year"]) {
+    if (params.get("year")) count += 1;
+    for (const key of ["genre", "mood", "instrument", "attribute"]) {
       count += countListParam(params, key);
     }
     const sortParam = params.get("sort");

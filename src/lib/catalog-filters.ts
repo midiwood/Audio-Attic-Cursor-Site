@@ -58,9 +58,8 @@ export function parseCatalogFilters(
   const sortDir =
     dirParam === "asc" || dirParam === "desc" ? dirParam : defaultSortDir(sort);
 
-  const years = all(params, "year")
-    .map((value) => Number(value))
-    .filter((value) => Number.isFinite(value));
+  const yearParam = get("year");
+  const yearNum = yearParam != null && yearParam !== "" ? Number(yearParam) : NaN;
 
   const raw: TrackFilters = {
     q: get("q"),
@@ -72,7 +71,7 @@ export function parseCatalogFilters(
       ? licenseParam
       : "all") as TrackFilters["license"],
     samro: parseSamroFilter(get("samro")),
-    year: years.length ? years : undefined,
+    year: Number.isFinite(yearNum) ? [yearNum] : undefined,
     sort,
     sortDir,
   };
@@ -95,11 +94,7 @@ export function catalogFiltersToQuery(filters: TrackFilters): string {
   setListParam(next, "mood", filters.mood);
   setListParam(next, "instrument", filters.instrument);
   setListParam(next, "attribute", filters.attribute);
-  setListParam(
-    next,
-    "year",
-    filters.year?.map((value) => String(value)),
-  );
+  if (filters.year?.length) next.set("year", String(filters.year[0]));
 
   const sort = filters.sort || DEFAULT_CATALOG_SORT;
   const sortDir = filters.sortDir || defaultSortDir(sort);

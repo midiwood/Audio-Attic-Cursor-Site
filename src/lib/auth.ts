@@ -18,10 +18,20 @@ function authBaseUrl() {
   return process.env.BETTER_AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 }
 
+function authTrustedOrigins(): string[] {
+  const base = authBaseUrl().replace(/\/$/, "");
+  const extras = String(process.env.BETTER_AUTH_TRUSTED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim().replace(/\/$/, ""))
+    .filter(Boolean);
+  return [...new Set([base, ...extras].filter(Boolean))];
+}
+
 export const auth = betterAuth({
   appName: "Audio Attic",
   secret: authSecret(),
   baseURL: authBaseUrl(),
+  trustedOrigins: authTrustedOrigins(),
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema: {

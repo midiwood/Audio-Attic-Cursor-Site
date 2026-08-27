@@ -14,6 +14,18 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Production (cPanel Node.js)
+
+See **[docs/CPANEL.md](docs/CPANEL.md)** for shared-hosting setup.
+
+Summary: Node **20+**, Application root = folder with `package.json`, startup file = **`app.js`**, set `BETTER_AUTH_URL` to your HTTPS subdomain, then `npm run build` and Restart.
+
+```bash
+npm ci
+npm run build
+npm start          # uses app.js (Passenger / cPanel)
+```
+
 The site is **private** for now: unauthenticated visits redirect to `/admin/login`.
 
 Auth uses [Better Auth](https://www.better-auth.com/) (email + password, session cookies). Roles:
