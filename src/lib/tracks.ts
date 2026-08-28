@@ -225,18 +225,20 @@ export function isMp3AudioUrl(...urls: Array<string | null | undefined>): boolea
   return false;
 }
 
-/** Import accepts MP3 or WAV (WAV is normalized to vault MP3 on ingest). */
+/** Import accepts MP3, WAV, or AIFF (lossless formats are normalized to vault MP3 on ingest). */
 export function isAllowedImportAudioUrl(...urls: Array<string | null | undefined>): boolean {
   for (const url of urls) {
     if (!url?.trim()) continue;
     const name = (filenameFromDropboxUrl(url) || url).toLowerCase();
-    if (/\.(mp3|wav)(?:$|\?)/i.test(name) || /\.(mp3|wav)$/i.test(name)) return true;
+    if (/\.(mp3|wav|aiff|aif)(?:$|\?)/i.test(name) || /\.(mp3|wav|aiff|aif)$/i.test(name)) {
+      return true;
+    }
   }
   return false;
 }
 
 export function mp3OnlyErrorMessage() {
-  return "Only MP3 or WAV files are accepted";
+  return "Only MP3, WAV, or AIFF files are accepted";
 }
 
 /** @deprecated use mp3OnlyErrorMessage — kept for call sites */

@@ -570,7 +570,6 @@ function InlineTrackEditor({
     workingTitle: track.workingTitle || "",
     description: track.description || "",
     notes: track.notes || "",
-    dropboxLink: track.dropboxLink || "",
     client: track.client || "",
     project: track.project || "",
     year: track.year?.toString() || "",
@@ -609,6 +608,7 @@ function InlineTrackEditor({
 
   const working = busy || aiBusy;
   const historyKey = licenseHistoryKey + localLicenseKey;
+  const vaultAudioLink = (track.dropboxLink || "").trim();
 
   useEffect(() => {
     let cancelled = false;
@@ -639,7 +639,7 @@ function InlineTrackEditor({
     setMessage("AI analyzing audio…");
 
     const result = await fetchAiTrackSuggestion({
-      dropboxLink: form.dropboxLink,
+      dropboxLink: vaultAudioLink,
       title: form.workingTitle || form.libraryTitle,
       client: form.client,
       license: form.license,
@@ -714,7 +714,6 @@ function InlineTrackEditor({
         workingTitle: form.workingTitle,
         description: form.description,
         notes: form.notes,
-        dropboxLink: form.dropboxLink,
         client: form.client,
         project: form.project,
         year: form.year,
@@ -762,9 +761,9 @@ function InlineTrackEditor({
           <button
             type="button"
             onClick={() => void runAi()}
-            disabled={working || !form.dropboxLink.trim()}
+            disabled={working || !vaultAudioLink}
             className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink)] transition hover:border-[var(--accent)] disabled:opacity-50"
-            title={!form.dropboxLink.trim() ? "Dropbox link required" : "Re-analyze audio and refresh tags"}
+            title={!vaultAudioLink ? "Vault audio not available" : "Re-analyze audio and refresh tags"}
           >
             {aiBusy ? "AI…" : "Re-run AI"}
           </button>
@@ -858,16 +857,6 @@ function InlineTrackEditor({
               className={fieldClass}
               value={form.workingTitle}
               onChange={(e) => patchForm({ workingTitle: e.target.value })}
-            />
-          </label>
-          <label className="sm:col-span-2">
-            <span className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-[var(--ink-dim)]">
-              Dropbox link
-            </span>
-            <input
-              className={fieldClass}
-              value={form.dropboxLink}
-              onChange={(e) => patchForm({ dropboxLink: e.target.value })}
             />
           </label>
           <label>

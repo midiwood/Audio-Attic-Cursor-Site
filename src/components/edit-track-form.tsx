@@ -72,7 +72,6 @@ export function EditTrackForm({
     workingTitle: track.workingTitle || "",
     description: track.description || "",
     notes: track.notes || "",
-    dropboxLink: track.dropboxLink || "",
     client: track.client || "",
     project: track.project || "",
     year: track.year?.toString() || "",
@@ -114,10 +113,11 @@ export function EditTrackForm({
   const [licenseHistoryKey, setLicenseHistoryKey] = useState(0);
 
   const working = busy || aiBusy;
+  const vaultAudioLink = (track.dropboxLink || "").trim();
   const previewUrl = useMemo(() => {
-    if (!form.dropboxLink.trim()) return "";
-    return `/api/audio/preview?url=${encodeURIComponent(form.dropboxLink.trim())}`;
-  }, [form.dropboxLink]);
+    if (!vaultAudioLink) return "";
+    return `/api/audio/preview?url=${encodeURIComponent(vaultAudioLink)}`;
+  }, [vaultAudioLink]);
 
   function patchForm(patch: Partial<typeof form>) {
     setForm((prev) => ({ ...prev, ...patch }));
@@ -129,7 +129,7 @@ export function EditTrackForm({
     setMessage("AI analyzing audio…");
 
     const result = await fetchAiTrackSuggestion({
-      dropboxLink: form.dropboxLink,
+      dropboxLink: vaultAudioLink,
       title: form.workingTitle || form.libraryTitle,
       client: form.client,
       license: form.license,
@@ -179,7 +179,6 @@ export function EditTrackForm({
         workingTitle: form.workingTitle,
         description: form.description,
         notes: form.notes,
-        dropboxLink: form.dropboxLink,
         client: form.client,
         project: form.project,
         year: form.year,
@@ -260,16 +259,6 @@ export function EditTrackForm({
             className={`${fieldClass} min-h-[72px] resize-y`}
             value={form.description}
             onChange={(e) => patchForm({ description: e.target.value })}
-          />
-        </label>
-        <label className="block">
-          <span className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-[var(--ink-dim)]">
-            Dropbox link
-          </span>
-          <input
-            className={fieldClass}
-            value={form.dropboxLink}
-            onChange={(e) => patchForm({ dropboxLink: e.target.value })}
           />
         </label>
 
@@ -452,10 +441,10 @@ export function EditTrackForm({
           </label>
           <button
             type="button"
-            disabled={working || !form.dropboxLink.trim()}
+            disabled={working || !vaultAudioLink}
             onClick={() => void runAi()}
             className="rounded-md border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink)] transition hover:border-[var(--accent)] disabled:opacity-50"
-            title={!form.dropboxLink.trim() ? "Dropbox link required" : undefined}
+            title={!vaultAudioLink ? "Vault audio not available" : undefined}
           >
             {aiBusy ? "AI analyzing…" : "Re-run AI"}
           </button>

@@ -122,11 +122,12 @@ export async function PATCH(
   }
 
   const dropboxLinkProvided = typeof body.dropboxLink === "string";
-  const dropboxLink = (body.dropboxLink ?? existing.dropboxLink ?? "").trim();
+  const dropboxLink = dropboxLinkProvided
+    ? String(body.dropboxLink ?? "").trim()
+    : (existing.dropboxLink ?? "").trim();
   if (!dropboxLink) {
-    return NextResponse.json({ error: "Dropbox link is required" }, { status: 400 });
+    return NextResponse.json({ error: "Track has no vault audio link" }, { status: 400 });
   }
-  // New/changed links must be MP3; existing non-MP3 catalog rows can keep their link until migrated.
   if (dropboxLinkProvided && !isMp3AudioUrl(dropboxLink)) {
     return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
   }
