@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 type CheckItem = {
   dropboxLink?: string;
+  dropboxPath?: string;
   workingTitle?: string;
   libraryTitle?: string;
 };
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
     matches: findDuplicateMatches(
       {
         dropboxLink: item.dropboxLink,
+        dropboxPath: item.dropboxPath,
         workingTitle: item.workingTitle,
         libraryTitle: item.libraryTitle,
       },

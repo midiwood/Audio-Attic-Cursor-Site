@@ -63,5 +63,9 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclude multipart upload APIs so middleware body buffering (default ~10MB)
+  // cannot truncate audio FormData. These routes enforce auth themselves.
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|api/tracks/prepare-vault|api/tracks/import|api/tracks/suggest-tags|api/profile/avatar|api/audio/zip).*)",
+  ],
 };

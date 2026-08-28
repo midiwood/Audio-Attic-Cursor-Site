@@ -9,6 +9,13 @@ export type DuplicateMatch = {
   reason: DuplicateReason;
 };
 
+/** Vault masters are always stored as track.mp3 — never use that as a file identity. */
+const GENERIC_VAULT_FILENAMES = new Set(["track.mp3"]);
+
+function isGenericVaultFilename(name: string): boolean {
+  return GENERIC_VAULT_FILENAMES.has(name.trim().toLowerCase());
+}
+
 /** Keep letters + digits (so codes like M3 stay distinct). */
 export function normalizeTitleKey(value: string | null | undefined): string {
   if (!value) return "";
@@ -80,13 +87,29 @@ function linkKeys(link: string | null | undefined): string[] {
     // ignore
   }
   const filename = filenameFromDropboxUrl(link).toLowerCase();
-  if (filename) keys.add(`file:${filename}`);
+  // Do not key on vault master filename — every staged/final vault file is track.mp3.
+  if (filename && !isGenericVaultFilename(filename)) {
+    keys.add(`file:${filename}`);
+  }
   return [...keys];
+}
+
+function pathKey(path: string | null | undefined): string | null {
+  const raw = String(path || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .replace(/\/+$/, "");
+  if (!raw) return null;
+  // Staging paths are never catalog collisions.
+  if (raw.includes("/_tmp/")) return null;
+  return `path:${raw}`;
 }
 
 export function findDuplicateMatches(
   candidate: {
     dropboxLink?: string | null;
+    dropboxPath?: string | null;
     workingTitle?: string | null;
     libraryTitle?: string | null;
   },
@@ -94,6 +117,7 @@ export function findDuplicateMatches(
     id: string;
     dropboxLink: string | null;
     dropboxDl?: string | null;
+    dropboxPath?: string | null;
     workingTitle: string | null;
     libraryTitle: string | null;
   }>,
@@ -102,8 +126,15 @@ export function findDuplicateMatches(
     ...linkKeys(candidate.dropboxLink),
     ...linkKeys(candidate.workingTitle?.includes("http") ? candidate.workingTitle : ""),
   ]);
+  const candPath = pathKey(candidate.dropboxPath);
+  if (candPath) candLinks.add(candPath);
+
   const workingFile = (candidate.workingTitle || "").trim().toLowerCase();
-  if (workingFile && /\.(mp3|wav|aiff|aif|flac|m4a)$/i.test(workingFile)) {
+  if (
+    workingFile &&
+    /\.(mp3|wav|aiff|aif|flac|m4a)$/i.test(workingFile) &&
+    !isGenericVaultFilename(workingFile)
+  ) {
     candLinks.add(`file:${workingFile}`);
   }
 
@@ -120,10 +151,14 @@ export function findDuplicateMatches(
     const existingLinks = new Set([
       ...linkKeys(track.dropboxLink),
       ...linkKeys(track.dropboxDl),
-      ...(track.workingTitle && /\.(mp3|wav|aiff|aif|flac|m4a)$/i.test(track.workingTitle)
+      ...(track.workingTitle &&
+      /\.(mp3|wav|aiff|aif|flac|m4a)$/i.test(track.workingTitle) &&
+      !isGenericVaultFilename(track.workingTitle)
         ? [`file:${track.workingTitle.trim().toLowerCase()}`]
         : []),
     ]);
+    const existingPath = pathKey(track.dropboxPath);
+    if (existingPath) existingLinks.add(existingPath);
 
     for (const key of candLinks) {
       if (existingLinks.has(key)) {
@@ -157,11 +192,12 @@ export function findDuplicateMatches(
 
     if (!reasons.length) continue;
 
-    const reason: DuplicateReason = reasons.includes("same_file")
-      ? "same_file"
-      : reasons.includes("same_title")
-        ? "same_title"
-        : "similar_title";
+    const reason: DuplicateReason =
+      reasons.includes("same_file")
+        ? "same_file"
+        : reasons.includes("same_title")
+          ? "same_title"
+          : "similar_title";
 
     if (seen.has(track.id)) continue;
     seen.add(track.id);

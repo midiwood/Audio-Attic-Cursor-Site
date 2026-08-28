@@ -67,7 +67,9 @@ export function parseCatalogFilters(
     mood: all(params, "mood"),
     instrument: all(params, "instrument"),
     attribute: all(params, "attribute"),
-    license: (["available", "clear", "library", "exclusive", "hold", "all"].includes(licenseParam)
+    license: (["available", "clear", "library", "exclusive", "hold", "personal", "all"].includes(
+      licenseParam,
+    )
       ? licenseParam
       : "all") as TrackFilters["license"],
     samro: parseSamroFilter(get("samro")),

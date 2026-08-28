@@ -433,7 +433,7 @@ CREATE TABLE IF NOT EXISTS site_settings (
   // ignore
 }
 
-// Normalize license tags: Clear | Library | Exclusive | On Hold
+// Normalize license tags: Clear | Library | Exclusive | On Hold | Personal
 try {
   sqlite
     .prepare(
@@ -445,7 +445,7 @@ try {
     .run();
   sqlite
     .prepare(
-      `UPDATE tracks SET license = 'Clear' WHERE license NOT IN ('Clear', 'Library', 'Exclusive', 'On Hold')`,
+      `UPDATE tracks SET license = 'Clear' WHERE license NOT IN ('Clear', 'Library', 'Exclusive', 'On Hold', 'Personal')`,
     )
     .run();
 } catch (err) {

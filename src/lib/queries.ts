@@ -31,7 +31,7 @@ export type TrackFilters = {
   mood?: string[];
   instrument?: string[];
   attribute?: string[];
-  license?: "available" | "clear" | "library" | "exclusive" | "hold" | "all";
+  license?: "available" | "clear" | "library" | "exclusive" | "hold" | "personal" | "all";
   /** Staff-only: SAMRO PRO submission. `prepare` = licensed ∩ not submitted. */
   samro?: "yes" | "no" | "prepare" | "all";
   year?: number[];
@@ -118,6 +118,7 @@ export function upsertTrack(data: Omit<NewTrack, "createdAt" | "updatedAt"> & Pa
         client: payload.client,
         project: payload.project,
         description: payload.description,
+        notes: payload.notes,
         year: payload.year,
         duration: payload.duration,
         bpm: payload.bpm,
@@ -165,6 +166,7 @@ export function listTracksForDuplicateCheck() {
       id: tracks.id,
       dropboxLink: tracks.dropboxLink,
       dropboxDl: tracks.dropboxDl,
+      dropboxPath: tracks.dropboxPath,
       workingTitle: tracks.workingTitle,
       libraryTitle: tracks.libraryTitle,
     })
@@ -278,11 +280,13 @@ export function getFacetOptions(filters: TrackFilters = {}) {
   let library = false;
   let exclusive = false;
   let hold = false;
+  let personal = false;
   for (const track of forLicense) {
     const license = track.license || "";
     if (license === "Library" || license === "Library [Available]") library = true;
     else if (license === "Exclusive") exclusive = true;
     else if (license === "On Hold") hold = true;
+    else if (license === "Personal") personal = true;
     else if (isAvailableLicense(license)) clear = true;
   }
 
@@ -297,6 +301,7 @@ export function getFacetOptions(filters: TrackFilters = {}) {
       library,
       exclusive,
       hold,
+      personal,
       /** Clear + Library — used for subscriber “available” view. */
       available: clear || library,
     },
@@ -432,6 +437,8 @@ function buildWhere(filters: TrackFilters): SQL | undefined {
     clauses.push(eq(tracks.license, "Exclusive"));
   } else if (filters.license === "hold") {
     clauses.push(eq(tracks.license, "On Hold"));
+  } else if (filters.license === "personal") {
+    clauses.push(eq(tracks.license, "Personal"));
   }
 
   if (filters.samro === "yes") {

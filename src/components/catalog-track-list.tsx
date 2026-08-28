@@ -22,6 +22,8 @@ import { SamroPrepareBar } from "@/components/samro-prepare-bar";
 import { BrowseSelectionBar } from "@/components/browse-selection-bar";
 import { BatchTrackEditPanel } from "@/components/batch-track-edit-panel";
 import type { ComposerOption } from "@/components/composer-picker";
+import { downloadTracksZip } from "@/lib/download-tracks-zip";
+import { MAX_ZIP_TRACKS } from "@/lib/audio-download-shared";
 
 const SORT_VALUES: CatalogSort[] = ["title", "year", "bpm", "date"];
 
@@ -87,6 +89,8 @@ export function CatalogTrackList({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
   const [selectAllBusy, setSelectAllBusy] = useState(false);
   const [filteredSelectAllIds, setFilteredSelectAllIds] = useState<Set<string> | null>(null);
   const [browseSelectionMode, setBrowseSelectionMode] = useState(false);
@@ -332,6 +336,20 @@ export function CatalogTrackList({
     setExtraSelectedTracks([]);
   }
 
+  async function handleDownloadSelected() {
+    const ids = [...selectedIds];
+    if (!ids.length || downloadBusy) return;
+    if (ids.length > MAX_ZIP_TRACKS) {
+      setDownloadError(`Download at most ${MAX_ZIP_TRACKS} tracks at a time`);
+      return;
+    }
+    setDownloadBusy(true);
+    setDownloadError("");
+    const result = await downloadTracksZip({ trackIds: ids });
+    setDownloadBusy(false);
+    if (!result.ok) setDownloadError(result.error);
+  }
+
   function handleBatchApplied(summary: { updated: number; failed: number }) {
     setBatchNotice(
       summary.failed
@@ -470,8 +488,10 @@ export function CatalogTrackList({
       {selectionActive && !prepareProMode && selectedIds.size > 0 ? (
         <BrowseSelectionBar
           selectedCount={selectedIds.size}
+          downloadBusy={downloadBusy}
           onClear={clearSelection}
           onBatchEdit={() => setBatchEditOpen(true)}
+          onDownload={() => void handleDownloadSelected()}
         />
       ) : null}
 
@@ -494,6 +514,9 @@ export function CatalogTrackList({
       ) : null}
       {error ? (
         <p className="py-3 text-center text-sm text-[var(--exclusive)]">{error}</p>
+      ) : null}
+      {downloadError ? (
+        <p className="py-3 text-center text-sm text-[var(--exclusive)]">{downloadError}</p>
       ) : null}
       {!hasMore && tracks.length > 0 ? (
         <p className="py-3 text-center text-xs text-[var(--ink-dim)]">End of list</p>

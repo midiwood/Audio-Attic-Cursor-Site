@@ -25,7 +25,8 @@ import {
   dropboxAuthConfigured,
   dropboxAuthSetupMessage,
 } from "@/lib/dropbox-auth";
-import { ingestTrackToVault } from "@/lib/vault-ingest";
+import { ingestTrackToVault, finalizeVaultForTrack } from "@/lib/vault-ingest";
+import { isVaultStagingPath } from "@/lib/dropbox-files";
 import {
   formatArtistFromComposers,
   getComposerById,
@@ -79,7 +80,27 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const body = await req.json().catch(() => null);
+  const contentType = req.headers.get("content-type") || "";
+  const audioByIndex = new Map<number, { bytes: Buffer; filename: string }>();
+  let body: Record<string, unknown> | null = null;
+
+  if (contentType.includes("multipart/form-data")) {
+    const form = await req.formData();
+    body = JSON.parse(String(form.get("payload") || "{}")) as Record<string, unknown>;
+    for (const [key, value] of form.entries()) {
+      const match = /^audio_(\d+)$/.exec(key);
+      if (!match || !(value instanceof File)) continue;
+      const index = Number(match[1]);
+      const bytes = Buffer.from(await value.arrayBuffer());
+      audioByIndex.set(index, {
+        bytes,
+        filename: value.name || `track-${index}.mp3`,
+      });
+    }
+  } else {
+    body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
+  }
+
   if (!body || !Array.isArray(body.tracks)) {
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
@@ -87,10 +108,17 @@ export async function POST(req: NextRequest) {
   const shared = (body.shared || {}) as Record<string, unknown>;
   const sharedComposerAssignments = parseComposerAssignments(shared.composers) ?? [];
   const tracksInput = body.tracks as Array<{
+    id?: string;
+    stagingId?: string;
     workingTitle?: string;
     libraryTitle?: string;
     dropboxLink?: string;
+    dropboxDl?: string;
+    dropboxPath?: string;
     sourceDropboxPath?: string;
+    sourceFolderLink?: string;
+    vaultReady?: boolean;
+    localOnly?: boolean;
     duration?: string;
     description?: string;
     genre?: string;
@@ -109,11 +137,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: dropboxAuthSetupMessage() }, { status: 500 });
   }
 
-  for (const track of tracksInput) {
-    if (!track.dropboxLink?.trim()) {
-      return NextResponse.json({ error: "Each track needs a Dropbox link before import" }, { status: 400 });
+  for (let index = 0; index < tracksInput.length; index++) {
+    const track = tracksInput[index];
+    const link = track.dropboxLink?.trim() || "";
+    const localAudio = audioByIndex.get(index);
+    const vaultReady = Boolean(
+      track.vaultReady && track.dropboxLink && track.dropboxDl && track.dropboxPath,
+    );
+    const localOnly = Boolean(track.localOnly) || (!link && localAudio);
+
+    if (vaultReady) continue;
+
+    if (localOnly) {
+      if (!localAudio?.bytes.length) {
+        return NextResponse.json(
+          { error: `Track ${index + 1} is a local upload but no audio file was received` },
+          { status: 400 },
+        );
+      }
+      if (!isAllowedImportAudioUrl(localAudio.filename)) {
+        return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
+      }
+      continue;
     }
-    if (!isAllowedImportAudioUrl(track.dropboxLink, track.sourceDropboxPath)) {
+
+    if (!link) {
+      return NextResponse.json(
+        { error: "Each track needs a Dropbox link or a local audio file" },
+        { status: 400 },
+      );
+    }
+    if (!isAllowedImportAudioUrl(link, track.sourceDropboxPath)) {
       return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
     }
   }
@@ -139,6 +193,8 @@ export async function POST(req: NextRequest) {
       error = "Clear means no sync deals — set status to Library or Exclusive to log a license.";
     } else if (status === "hold") {
       error = "On Hold tracks can’t log new sync deals.";
+    } else if (status === "personal") {
+      error = "Personal tracks are private and can’t log sync deals.";
     }
     return NextResponse.json({ error }, { status: 400 });
   }
@@ -150,7 +206,19 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const ids = getNextTrackIds(tracksInput.length);
+  // Catalog ids are allocated only on Import confirm (not during prepare/AI staging).
+  const needsFreshId = (track: (typeof tracksInput)[number]) => {
+    const id = String(track.id || "").trim();
+    if (!id || id.startsWith("stg_")) return true;
+    if (track.stagingId?.trim() || isVaultStagingPath(track.dropboxPath)) return true;
+    return false;
+  };
+  const freshCount = tracksInput.filter(needsFreshId).length;
+  const freshIds = freshCount ? getNextTrackIds(freshCount) : [];
+  let freshIndex = 0;
+  const ids = tracksInput.map((track) =>
+    needsFreshId(track) ? freshIds[freshIndex++]! : String(track.id || "").trim(),
+  );
   const nowDisplay = new Date().toUTCString();
   const derivedFrom = parseDerivedFrom(body.derivedFrom);
 
@@ -187,9 +255,13 @@ export async function POST(req: NextRequest) {
     created = [];
     for (let index = 0; index < tracksInput.length; index++) {
       const track = tracksInput[index];
-      const sourceLink = track.dropboxLink!.trim();
+      const sourceLink = track.dropboxLink?.trim() || "";
       const sourceDropboxPath = track.sourceDropboxPath?.trim() || null;
-      const fallbackTitle = titleFromDropboxUrl(sourceLink) || ids[index];
+      const localAudio = audioByIndex.get(index);
+      const fallbackTitle =
+        titleFromFilename(localAudio?.filename || "") ||
+        titleFromDropboxUrl(sourceLink) ||
+        ids[index];
       const libraryTitle =
         titleFromFilename(track.libraryTitle?.trim() || "") || fallbackTitle;
       const workingTitle =
@@ -220,12 +292,32 @@ export async function POST(req: NextRequest) {
           )
         : String(shared.artist || "").trim() || "Richard Vossgatter";
 
-      const vault = await ingestTrackToVault({
-        trackId: ids[index],
-        sourceDropboxPath,
-        sourceUrl: sourceLink,
-        sourceHint: sourceDropboxPath || sourceLink || libraryTitle,
-      });
+      const vaultReady = Boolean(
+        track.vaultReady &&
+          track.dropboxLink?.trim() &&
+          track.dropboxDl?.trim() &&
+          track.dropboxPath?.trim(),
+      );
+
+      const vault = vaultReady
+        ? await finalizeVaultForTrack({
+            trackId: ids[index],
+            stagingId: track.stagingId?.trim() || null,
+            stagingPath: track.dropboxPath?.trim() || null,
+            dropboxLink: track.dropboxLink?.trim() || null,
+            dropboxDl: track.dropboxDl?.trim() || null,
+            dropboxPath: track.dropboxPath?.trim() || null,
+            sourceDropboxPath: track.sourceDropboxPath?.trim() || null,
+            sourceFolderLink: track.sourceFolderLink?.trim() || null,
+          })
+        : await ingestTrackToVault({
+            trackId: ids[index],
+            sourceBytes: localAudio?.bytes || null,
+            sourceDropboxPath,
+            sourceUrl: sourceLink || null,
+            sourceHint:
+              localAudio?.filename || sourceDropboxPath || sourceLink || libraryTitle,
+          });
 
       const saved = upsertTrack({
         id: ids[index],

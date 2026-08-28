@@ -101,7 +101,9 @@ export function BottomPlayer() {
                           ? "text-[var(--library)]"
                           : status === "exclusive"
                             ? "text-[var(--exclusive)]"
-                            : "text-[var(--hold)]"
+                            : status === "personal"
+                              ? "text-[var(--personal)]"
+                              : "text-[var(--hold)]"
                     }`}
                   >
                     {licenseLabel(current.license)}

@@ -8,6 +8,7 @@ import type { TrackRelationView } from "@/lib/track-relations";
 import type { CatalogMetaSuggestions } from "@/lib/queries";
 import type { UserTrackLicenseStatus } from "@/lib/license-requests";
 import type { CatalogVocabulary } from "@/lib/vocabulary";
+import { downloadTracksZip } from "@/lib/download-tracks-zip";
 
 export function PlaylistDetailClient({
   playlistId,
@@ -41,6 +42,8 @@ export function PlaylistDetailClient({
   const [relationsByTrack, setRelationsByTrack] = useState<
     Record<string, TrackRelationView[]>
   >({});
+  const [downloadBusy, setDownloadBusy] = useState(false);
+  const [downloadError, setDownloadError] = useState("");
 
   useEffect(() => {
     setTracks(initialTracks);
@@ -69,6 +72,15 @@ export function PlaylistDetailClient({
     router.refresh();
   }
 
+  async function downloadPlaylist() {
+    if (!queue.length || downloadBusy) return;
+    setDownloadBusy(true);
+    setDownloadError("");
+    const result = await downloadTracksZip({ playlistId });
+    setDownloadBusy(false);
+    if (!result.ok) setDownloadError(result.error);
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -83,11 +95,22 @@ export function PlaylistDetailClient({
         >
           Play playlist
         </button>
+        <button
+          type="button"
+          disabled={!queue.length || downloadBusy}
+          onClick={() => void downloadPlaylist()}
+          className="rounded-lg border border-[var(--line)] px-5 py-2.5 text-sm font-medium text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {downloadBusy ? "Preparing zip…" : "Download playlist"}
+        </button>
         <span className="text-sm text-[var(--ink-dim)]">
           {tracks.length} track{tracks.length === 1 ? "" : "s"} in {playlistName}
           {!canModifyPlaylist ? " · view only" : ""}
         </span>
       </div>
+      {downloadError ? (
+        <p className="text-sm text-[var(--exclusive)]">{downloadError}</p>
+      ) : null}
       <TrackList
         tracks={tracks}
         relationsByTrack={relationsByTrack}

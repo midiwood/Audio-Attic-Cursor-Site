@@ -1,7 +1,7 @@
 /** Canonical stored license values. Unknown / empty defaults to Clear. */
-export const LICENSE_OPTIONS = ["Clear", "Library", "Exclusive", "On Hold"] as const;
+export const LICENSE_OPTIONS = ["Clear", "Library", "Exclusive", "On Hold", "Personal"] as const;
 export type LicenseOption = (typeof LICENSE_OPTIONS)[number];
-export type LicenseStatus = "clear" | "library" | "exclusive" | "hold";
+export type LicenseStatus = "clear" | "library" | "exclusive" | "hold" | "personal";
 
 export function normalizeLicenseStatus(license: string | null | undefined): LicenseStatus {
   const value = (license ?? "").trim().toLowerCase();
@@ -23,6 +23,9 @@ export function normalizeLicenseStatus(license: string | null | undefined): Lice
   if (value === "on hold" || value === "hold") {
     return "hold";
   }
+  if (value === "personal") {
+    return "personal";
+  }
   // Legacy "[Available]" without Library → Clear; anything else → Clear
   if (value.includes("[available]")) {
     return "clear";
@@ -30,10 +33,15 @@ export function normalizeLicenseStatus(license: string | null | undefined): Lice
   return "clear";
 }
 
-/** Clear + Library are both open for licensing (subscriber-visible). */
+/** Clear + Library are open for licensing (subscriber-visible). */
 export function isAvailableLicense(license: string | null | undefined): boolean {
   const status = normalizeLicenseStatus(license);
   return status === "clear" || status === "library";
+}
+
+/** Personal tracks are staff-only — hidden from subscribers and guest playlists. */
+export function isPersonalLicense(license: string | null | undefined): boolean {
+  return normalizeLicenseStatus(license) === "personal";
 }
 
 export function licenseLabel(license: string | null | undefined): string {
@@ -41,24 +49,26 @@ export function licenseLabel(license: string | null | undefined): string {
   if (status === "clear") return "Clear";
   if (status === "library") return "Library";
   if (status === "exclusive") return "Exclusive";
+  if (status === "personal") return "Personal";
   return "On Hold";
 }
 
-/** Select option label; stored value stays Clear / Library / Exclusive / On Hold. */
+/** Select option label; stored value stays Clear / Library / Exclusive / On Hold / Personal. */
 export function licenseOptionLabel(option: LicenseOption): string {
   return option;
 }
 
-/** Persist only the four canonical tags. */
+/** Persist only the canonical tags. */
 export function canonicalizeLicense(license: string | null | undefined): LicenseOption {
   const status = normalizeLicenseStatus(license);
   if (status === "library") return "Library";
   if (status === "exclusive") return "Exclusive";
   if (status === "hold") return "On Hold";
+  if (status === "personal") return "Personal";
   return "Clear";
 }
 
-/** Which license-related fields to show for Library / Exclusive / On Hold vs Clear. */
+/** Which license-related fields to show for Library / Exclusive / On Hold vs Clear / Personal. */
 export function licenseFieldVisibility(license: string | null | undefined) {
   const status = normalizeLicenseStatus(license);
   if (status === "exclusive" || status === "hold" || status === "library") {

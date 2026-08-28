@@ -145,6 +145,9 @@ export function createLicenseEntry(
     if (status === "hold") {
       return { ok: false, error: "On Hold tracks can’t log new sync deals" };
     }
+    if (status === "personal") {
+      return { ok: false, error: "Personal tracks are private and can’t log sync deals" };
+    }
     return {
       ok: false,
       error:

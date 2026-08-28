@@ -42,6 +42,7 @@ type Available = {
     library: boolean;
     exclusive: boolean;
     hold: boolean;
+    personal: boolean;
     available: boolean;
   };
 };
@@ -352,7 +353,9 @@ export function CatalogFilters({
                 ? "Exclusive"
                 : licenseValue === "hold"
                   ? "On Hold"
-                  : licenseValue;
+                  : licenseValue === "personal"
+                    ? "Personal"
+                    : licenseValue;
       chips.push({ key: "license", value: licenseLabel });
     }
     if (showSamroFilter && samroValue === "yes") {
@@ -514,6 +517,14 @@ export function CatalogFilters({
                       {available.licenses.hold || licenseValue === "hold"
                         ? "On Hold"
                         : "On Hold · none"}
+                    </option>
+                    <option
+                      value="personal"
+                      disabled={!available.licenses.personal && licenseValue !== "personal"}
+                    >
+                      {available.licenses.personal || licenseValue === "personal"
+                        ? "Personal"
+                        : "Personal · none"}
                     </option>
                   </select>
                 </FilterRow>

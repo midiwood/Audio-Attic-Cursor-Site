@@ -9,7 +9,9 @@ export function LicenseBadge({ license }: { license?: string | null }) {
         ? "text-[var(--library)] border-[rgba(52,211,153,0.4)] bg-[rgba(52,211,153,0.12)]"
         : status === "exclusive"
           ? "text-[var(--exclusive)] border-[rgba(245,158,11,0.35)] bg-[rgba(245,158,11,0.12)]"
-          : "text-[var(--hold)] border-[rgba(56,189,248,0.4)] bg-[rgba(56,189,248,0.14)]";
+          : status === "personal"
+            ? "text-[var(--personal)] border-[rgba(167,139,250,0.4)] bg-[rgba(167,139,250,0.14)]"
+            : "text-[var(--hold)] border-[rgba(56,189,248,0.4)] bg-[rgba(56,189,248,0.14)]";
 
   return (
     <span

@@ -54,6 +54,9 @@ function statusHint(
   if (status === "clear") {
     return "Clear — no licenses on this track";
   }
+  if (status === "personal") {
+    return "Personal — admin only; not visible to subscribers";
+  }
   if (status === "hold") {
     return "On Hold — staff-visible; no new sync deals";
   }
@@ -119,7 +122,7 @@ export function TrackLicenseSection({
 
   const isEdit = Boolean(trackId);
   const status = normalizeLicenseStatus(license);
-  const showHistory = isEdit && status !== "clear";
+  const showHistory = isEdit && status !== "clear" && status !== "personal";
 
   const [addForm, setAddForm] = useState<LicenseEntryFormValue>(() =>
     emptyLicenseEntryForm({

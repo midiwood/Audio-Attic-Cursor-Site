@@ -15,6 +15,7 @@
   --library: #34d399;
   --exclusive: #f59e0b;
   --hold: #38bdf8;
+  --personal: #a78bfa;
   --other: #6f839c;
   --font-display: var(--font-sans), "Plus Jakarta Sans", "Avenir Next", sans-serif;
   --font-body: var(--font-sans), "Plus Jakarta Sans", "Avenir Next", sans-serif;
@@ -38,6 +39,7 @@
   --color-library: var(--library);
   --color-exclusive: var(--exclusive);
   --color-hold: var(--hold);
+  --color-personal: var(--personal);
   --color-other: var(--other);
   --font-display: var(--font-display);
   --font-body: var(--font-body);
@@ -119,6 +121,20 @@ html {
 .player-waveform > div,
 .player-waveform-inner > div {
   overflow: hidden;
+}
+
+@keyframes attic-pipeline-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+}
+
+.attic-pipeline-active {
+  animation: attic-pipeline-pulse 1.7s ease-in-out infinite;
 }
 
 

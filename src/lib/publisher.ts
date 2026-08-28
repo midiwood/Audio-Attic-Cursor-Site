@@ -17,7 +17,7 @@ export function getHousePublisherName(): string {
   return getPublisherRuntimeConfig().houseName.trim();
 }
 
-/** Subscribers see Clear / Library tracks (Exclusive and On Hold stay staff-only). */
+/** Subscribers see Clear / Library tracks (Exclusive, On Hold, and Personal stay staff-only). */
 export function isSubscriberVisible(track: {
   publisher?: string | null;
   license?: string | null;

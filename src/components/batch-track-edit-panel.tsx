@@ -301,6 +301,9 @@ export function BatchTrackEditPanel({
     if (normalizeLicenseStatus(effectiveLicense) === "clear") {
       return "Set license status to Library or Exclusive before adding a deal";
     }
+    if (normalizeLicenseStatus(effectiveLicense) === "personal") {
+      return "Personal tracks are private and can’t log sync deals";
+    }
     if (
       !canIssueSyncLicenses(
         { publisher: effectivePublisher, license: effectiveLicense },

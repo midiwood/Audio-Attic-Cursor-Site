@@ -1,6 +1,7 @@
 /**
  * Dropbox file download / upload / share helpers for the catalog vault.
- * Vault layout: {uploadFolder}/{trackId}/track.mp3  (normalized MP3 only)
+ * Final layout:  {uploadFolder}/{trackId}/track.mp3
+ * Staging layout:{uploadFolder}/_tmp/{stagingId}/track.mp3  (before import confirm)
  */
 
 import {
@@ -29,6 +30,23 @@ export function vaultTrackMp3Path(trackId: string): string {
   const id = trackId.trim();
   if (!id) throw new Error("trackId is required");
   return `${vaultRoot()}/${id}/track.mp3`;
+}
+
+export function vaultStagingFolderPath(stagingId: string): string {
+  const id = stagingId.trim();
+  if (!id) throw new Error("stagingId is required");
+  return `${vaultRoot()}/_tmp/${id}`;
+}
+
+export function vaultStagingMp3Path(stagingId: string): string {
+  return `${vaultStagingFolderPath(stagingId)}/track.mp3`;
+}
+
+export function isVaultStagingPath(path: string | null | undefined): boolean {
+  const p = String(path || "").replace(/\\/g, "/");
+  const root = vaultRoot().toLowerCase();
+  const lower = p.toLowerCase();
+  return lower.startsWith(`${root}/_tmp/`) || lower.includes("/_tmp/");
 }
 
 function parentPath(filePath: string): string {
@@ -265,6 +283,142 @@ export async function uploadIntoVault(opts: {
   if (!dropboxLink) throw new Error("Vault upload succeeded but no shared link was created");
   return {
     dropboxPath,
+    dropboxLink,
+    dropboxDl: toDropboxDlUrl(dropboxLink),
+  };
+}
+
+/** Stage normalized MP3 under Vault/_tmp until import is confirmed. */
+export async function uploadIntoVaultStaging(opts: {
+  stagingId: string;
+  mp3Bytes: Buffer;
+}): Promise<{ dropboxPath: string; dropboxLink: string; dropboxDl: string; stagingId: string }> {
+  const stagingId = opts.stagingId.trim();
+  if (!stagingId) throw new Error("stagingId is required");
+  const dropboxPath = vaultStagingMp3Path(stagingId);
+  await uploadFile(dropboxPath, opts.mp3Bytes);
+  const dropboxLink = await createOrGetSharedLink(dropboxPath);
+  if (!dropboxLink) throw new Error("Staging upload succeeded but no shared link was created");
+  return {
+    stagingId,
+    dropboxPath,
+    dropboxLink,
+    dropboxDl: toDropboxDlUrl(dropboxLink),
+  };
+}
+
+async function deletePath(path: string): Promise<void> {
+  const normalized = path.replace(/\/+$/, "");
+  if (!normalized) return;
+  await withDropboxToken(async (token) => {
+    const result = await dropboxJson(
+      token,
+      "https://api.dropboxapi.com/2/files/delete_v2",
+      { path: normalized },
+    );
+    if (result.ok) return;
+    const summary = String(
+      (result.data as { error_summary?: string })?.error_summary || "",
+    ).toLowerCase();
+    if (summary.includes("not_found") || summary.includes("path/not_found")) return;
+    throw new Error(
+      formatDropboxApiError(result.data, result.status, `Could not delete ${normalized}`),
+    );
+  });
+}
+
+/**
+ * Move staged MP3 into the permanent vault folder for a confirmed catalog id.
+ * Creates a fresh share link (old staging links are abandoned with the tmp path).
+ */
+export async function promoteVaultStaging(opts: {
+  stagingId?: string | null;
+  stagingPath?: string | null;
+  trackId: string;
+}): Promise<{ dropboxPath: string; dropboxLink: string; dropboxDl: string }> {
+  const trackId = opts.trackId.trim();
+  if (!trackId) throw new Error("trackId is required");
+
+  const stagingId = opts.stagingId?.trim() || "";
+  const fromFolder = stagingId
+    ? vaultStagingFolderPath(stagingId)
+    : parentPath(String(opts.stagingPath || "").trim());
+  const fromFile = stagingId
+    ? vaultStagingMp3Path(stagingId)
+    : String(opts.stagingPath || "").trim();
+
+  if (!fromFile || !isVaultStagingPath(fromFile)) {
+    throw new Error("Staging path is missing or not under Vault/_tmp");
+  }
+
+  const toPath = vaultTrackMp3Path(trackId);
+  const toFolder = parentPath(toPath);
+
+  await withDropboxToken(async (token) => {
+    // Move whole staging folder → {trackId}/ so we never create an empty dest first.
+    if (fromFolder && toFolder && fromFolder === parentPath(fromFile)) {
+      const folderMove = await dropboxJson(
+        token,
+        "https://api.dropboxapi.com/2/files/move_v2",
+        {
+          from_path: fromFolder,
+          to_path: toFolder,
+          autorename: false,
+          allow_ownership_transfer: false,
+        },
+      );
+      if (folderMove.ok) return;
+
+      const summary = String(
+        (folderMove.data as { error_summary?: string })?.error_summary || "",
+      ).toLowerCase();
+      if (!summary.includes("conflict") && !summary.includes("not_found")) {
+        throw new Error(
+          formatDropboxApiError(
+            folderMove.data,
+            folderMove.status,
+            `Could not promote staging folder to ${toFolder}`,
+          ),
+        );
+      }
+    }
+
+    if (toFolder) await ensureFolder(toFolder);
+
+    const fileMove = await dropboxJson(
+      token,
+      "https://api.dropboxapi.com/2/files/move_v2",
+      {
+        from_path: fromFile,
+        to_path: toPath,
+        autorename: false,
+        allow_ownership_transfer: false,
+      },
+    );
+    if (!fileMove.ok) {
+      throw new Error(
+        formatDropboxApiError(
+          fileMove.data,
+          fileMove.status,
+          `Could not promote staging file to ${toPath}`,
+        ),
+      );
+    }
+  });
+
+  // Best-effort cleanup if file-move left an empty staging folder behind.
+  if (fromFolder && fromFolder !== toFolder) {
+    try {
+      await deletePath(fromFolder);
+    } catch {
+      // ignore
+    }
+  }
+
+  const dropboxLink = await createOrGetSharedLink(toPath);
+  if (!dropboxLink) throw new Error("Vault promote succeeded but no shared link was created");
+  return {
+    dropboxPath: toPath,
     dropboxLink,
     dropboxDl: toDropboxDlUrl(dropboxLink),
   };

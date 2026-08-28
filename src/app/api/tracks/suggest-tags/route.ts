@@ -338,8 +338,11 @@ export async function POST(req: NextRequest) {
   });
 
   for (const track of prepared) {
-    if (!track.dropboxLink) {
-      return NextResponse.json({ error: "Each track needs a Dropbox link" }, { status: 400 });
+    if (!track.dropboxLink && !audioByIndex.has(track.index)) {
+      return NextResponse.json(
+        { error: "Each track needs a Dropbox link or attached audio" },
+        { status: 400 },
+      );
     }
   }
 

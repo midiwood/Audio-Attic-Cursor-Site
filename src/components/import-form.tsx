@@ -42,9 +42,22 @@ import type { CatalogVocabulary } from "@/lib/vocabulary";
 
 type DraftTrack = {
   clientId: string;
+  /** Catalog id — only set after Import confirms (or legacy drafts). */
+  trackId?: string;
+  /** Dropbox Vault/_tmp staging id from prepare (before confirm). */
+  stagingId?: string;
   dropboxLink: string;
+  dropboxDl?: string;
+  dropboxPath?: string;
   /** Dropbox path from resolve-link (original file). */
   sourceDropboxPath?: string;
+  sourceFolderLink?: string;
+  /** Normalized MP3 is staged (or vaulted) — skip re-normalize on AI path. */
+  vaultReady?: boolean;
+  /** True when the file is not (yet) on Dropbox — vault ingest uses local bytes. */
+  localOnly?: boolean;
+  /** Browser File kept for local-only import + AI. */
+  localFile?: File;
   workingTitle: string;
   libraryTitle: string;
   description: string;
@@ -59,6 +72,10 @@ type DraftTrack = {
 };
 
 function previewUrlFor(track: DraftTrack) {
+  // Prefer the normalized vault master once it exists.
+  if (track.vaultReady && track.dropboxLink) {
+    return `/api/audio/preview?url=${encodeURIComponent(track.dropboxLink)}`;
+  }
   if (track.localPreviewUrl) return track.localPreviewUrl;
   if (track.dropboxLink) return `/api/audio/preview?url=${encodeURIComponent(track.dropboxLink)}`;
   return "";
@@ -125,6 +142,7 @@ async function fetchDuplicateMatches(tracks: DraftTrack[]): Promise<{
     body: JSON.stringify({
       tracks: tracks.map((track) => ({
         dropboxLink: track.dropboxLink,
+        dropboxPath: track.dropboxPath || "",
         workingTitle: track.workingTitle,
         libraryTitle: track.libraryTitle,
       })),
@@ -203,6 +221,136 @@ function joinTags(tags: string[]) {
   return tags.join(", ");
 }
 
+const PIPELINE_STEPS = [
+  { id: "options", label: "Options" },
+  { id: "resolve", label: "Locate" },
+  { id: "stage", label: "Normalize" },
+  { id: "ai", label: "AI tag" },
+  { id: "import", label: "Import" },
+] as const;
+
+type PipelineStepId = (typeof PIPELINE_STEPS)[number]["id"];
+
+function pipelineStepIndex(id: PipelineStepId): number {
+  return PIPELINE_STEPS.findIndex((step) => step.id === id);
+}
+
+function ImportPipelineProgress({
+  activeId,
+  itemCurrent,
+  itemTotal,
+  title,
+  detail,
+  waiting,
+}: {
+  activeId: PipelineStepId;
+  itemCurrent?: number | null;
+  itemTotal?: number | null;
+  title: string;
+  detail: string;
+  waiting?: boolean;
+}) {
+  const stepIndex = Math.max(0, pipelineStepIndex(activeId));
+  const lastIndex = PIPELINE_STEPS.length - 1;
+  const within =
+    itemTotal && itemTotal > 0 && itemCurrent != null
+      ? Math.min(0.85, Math.max(0, (itemCurrent - 1) / itemTotal))
+      : waiting
+        ? 0
+        : 0.15;
+  const fillPct = Math.min(100, ((stepIndex + within) / lastIndex) * 100);
+  const itemLabel =
+    itemTotal && itemTotal > 1 && itemCurrent != null
+      ? `${itemCurrent} / ${itemTotal}`
+      : null;
+
+  return (
+    <section
+      className="space-y-4 rounded-lg border border-[var(--line)] bg-[rgba(18,28,44,0.72)] p-5 backdrop-blur-sm"
+      aria-busy={!waiting}
+      aria-live="polite"
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
+              Processing
+            </h2>
+            <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-[var(--accent)] bg-[var(--accent-soft)]">
+              {PIPELINE_STEPS[stepIndex]?.label}
+            </span>
+          </div>
+          <p className="mt-2 text-sm font-medium text-[var(--ink)]">{title}</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--ink-dim)]">{detail}</p>
+        </div>
+        {itemLabel ? (
+          <span className="shrink-0 rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.22)] px-2.5 py-1 text-[11px] tabular-nums text-[var(--ink-muted)]">
+            {itemLabel}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="pt-1">
+        <div className="relative mx-[11px] h-1.5 rounded-full bg-[rgba(148,173,204,0.14)]">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-[var(--accent)] transition-[width] duration-500 ease-out"
+            style={{ width: `${fillPct}%` }}
+            aria-hidden
+          />
+        </div>
+        <ol className="relative -mt-[11px] flex justify-between">
+          {PIPELINE_STEPS.map((step, index) => {
+            const done = index < stepIndex;
+            const active = index === stepIndex;
+            return (
+              <li key={step.id} className="flex w-[3.25rem] flex-col items-center gap-2">
+                <span
+                  className={`grid h-[22px] w-[22px] place-items-center rounded-full border text-[10px] font-semibold transition duration-300 ${
+                    done
+                      ? "border-[var(--accent)] bg-[var(--accent)] text-white"
+                      : active
+                        ? waiting
+                          ? "border-[var(--accent)] bg-[var(--bg-elevated)] text-[var(--accent)]"
+                          : "attic-pipeline-active border-[var(--accent)] bg-[var(--bg-elevated)] text-[var(--accent)]"
+                        : "border-[rgba(148,173,204,0.28)] bg-[var(--bg-elevated)] text-[var(--ink-dim)]"
+                  }`}
+                  aria-current={active ? "step" : undefined}
+                >
+                  {done ? (
+                    <svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden>
+                      <path
+                        d="M2.5 6.2 4.8 8.5 9.5 3.5"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <span
+                  className={`text-center text-[10px] leading-tight tracking-wide ${
+                    active
+                      ? "font-medium text-[var(--ink)]"
+                      : done
+                        ? "text-[var(--ink-muted)]"
+                        : "text-[var(--ink-dim)]"
+                  }`}
+                >
+                  {step.label}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
 function mergeTagLists(values: string[]) {
   const seen = new Set<string>();
   const merged: string[] = [];
@@ -265,13 +413,14 @@ function AiRenamePromptModal({
       >
         <div className="border-b border-[var(--line)] px-4 py-3">
           <h2 id="ai-rename-title" className="text-sm font-medium text-[var(--ink)]">
-            AI options for this batch
+            AI options for this import
           </h2>
         </div>
         <div className="space-y-3 px-4 py-4">
           <p className="text-sm leading-relaxed text-[var(--ink-muted)]">
-            AI will tag all {trackCount} tracks (description, tags, BPM, key). Choose title handling
-            and tag mode before it starts.
+            {trackCount === 1
+              ? "AI will tag this track (description, tags, BPM, key). Choose how to handle the library title before it starts."
+              : `AI will tag all ${trackCount} tracks (description, tags, BPM, key). Choose title handling and tag mode before it starts.`}
           </p>
           <p className="text-xs leading-relaxed text-[var(--ink-muted)]">
             Example cleanup:{" "}
@@ -319,39 +468,41 @@ function AiRenamePromptModal({
               </button>
             </div>
           </div>
-          <div className="space-y-2 rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.15)] p-2.5">
-            <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ink-dim)]">
-              Tag mode
-            </p>
-            <div className="flex flex-col gap-1.5">
-              <button
-                type="button"
-                onClick={() => setTagMode("individual")}
-                className={`rounded-md px-2.5 py-2 text-left text-xs transition ${
-                  tagMode === "individual"
-                    ? "bg-[var(--accent)] text-white"
-                    : "border border-[var(--line)] text-[var(--ink-muted)] hover:border-[var(--accent)]"
-                }`}
-              >
-                Individual tagging (per-track tags)
-              </button>
-              <button
-                type="button"
-                onClick={() => setTagMode("album")}
-                className={`rounded-md px-2.5 py-2 text-left text-xs transition ${
-                  tagMode === "album"
-                    ? "bg-[var(--accent)] text-white"
-                    : "border border-[var(--line)] text-[var(--ink-muted)] hover:border-[var(--accent)]"
-                }`}
-              >
-                Album tagging (shared tag cloud)
-              </button>
+          {trackCount > 1 ? (
+            <div className="space-y-2 rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.15)] p-2.5">
+              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ink-dim)]">
+                Tag mode
+              </p>
+              <div className="flex flex-col gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setTagMode("individual")}
+                  className={`rounded-md px-2.5 py-2 text-left text-xs transition ${
+                    tagMode === "individual"
+                      ? "bg-[var(--accent)] text-white"
+                      : "border border-[var(--line)] text-[var(--ink-muted)] hover:border-[var(--accent)]"
+                  }`}
+                >
+                  Individual tagging (per-track tags)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTagMode("album")}
+                  className={`rounded-md px-2.5 py-2 text-left text-xs transition ${
+                    tagMode === "album"
+                      ? "bg-[var(--accent)] text-white"
+                      : "border border-[var(--line)] text-[var(--ink-muted)] hover:border-[var(--accent)]"
+                  }`}
+                >
+                  Album tagging (shared tag cloud)
+                </button>
+              </div>
             </div>
-          </div>
+          ) : null}
           <div className="flex flex-col gap-2 pt-1">
             <button
               type="button"
-              onClick={() => onConfirm(titleMode, tagMode)}
+              onClick={() => onConfirm(titleMode, trackCount === 1 ? "individual" : tagMode)}
               className="rounded-md bg-[var(--accent)] px-3 py-2.5 text-sm font-medium text-white transition hover:brightness-110"
             >
               Run AI
@@ -413,7 +564,12 @@ export function ImportForm({
   const [derivedFrom, setDerivedFrom] = useState<DerivedFromLink[]>([]);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState<"idle" | "resolving" | "tagging" | "importing">("idle");
+  const [busy, setBusy] = useState<
+    "idle" | "resolving" | "vaulting" | "tagging" | "importing"
+  >("idle");
+  const [pipelineItem, setPipelineItem] = useState<{ current: number; total: number } | null>(
+    null,
+  );
   /** True from single-track queue until auto-AI finishes starting (avoids settings flash). */
   const [aiPending, setAiPending] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -561,6 +717,7 @@ export function ImportForm({
           body: JSON.stringify({
             tracks: drafts.map((track) => ({
               dropboxLink: track.dropboxLink,
+              dropboxPath: track.dropboxPath || "",
               workingTitle: track.workingTitle,
               libraryTitle: track.libraryTitle,
             })),
@@ -570,15 +727,14 @@ export function ImportForm({
         const data = await res.json().catch(() => ({}));
         if (!res.ok || controller.signal.aborted) return;
         const results = Array.isArray(data.results) ? data.results : [];
-        setDupWarnings(
-          drafts.map((_, index) => {
-            const row = results.find(
-              (item: { index?: number; matches?: DuplicateMatch[] }) => item.index === index,
-            );
-            return Array.isArray(row?.matches) ? row.matches : [];
-          }),
-        );
-        setDupCatalogTracks(Array.isArray(data.tracks) ? data.tracks : []);
+        const nextWarnings = drafts.map((_, index) => {
+          const row = results.find(
+            (item: { index?: number; matches?: DuplicateMatch[] }) => item.index === index,
+          );
+          return Array.isArray(row?.matches) ? row.matches : [];
+        });
+        setDupWarnings(nextWarnings);
+        setDupCatalogTracks(Array.isArray(data.tracks) ? (data.tracks as TrackListItem[]) : []);
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
         // ignore transient network blips while typing/editing
@@ -607,8 +763,13 @@ export function ImportForm({
   }
 
   function startAiWithRenameChoice(tracks: DraftTrack[], opts?: { force?: boolean }) {
-    const titleMode = tracks.length > 1 ? multiTitleMode : "creative";
-    void submitForAi(tracks, { force: opts?.force, titleMode });
+    const titleMode = multiTitleMode;
+    const allVaulted = tracks.every((track) => track.vaultReady);
+    if (allVaulted) {
+      void submitForAi(tracks, { force: opts?.force, titleMode });
+      return;
+    }
+    void vaultThenAi(tracks, { force: opts?.force, titleMode });
   }
 
   function resolveAiRenamePrompt(
@@ -633,46 +794,161 @@ export function ImportForm({
     setMessage("");
   }
 
-  async function maybeAutoAi(tracks: DraftTrack[], opts?: { titleMode?: "keep" | "cleanup" | "creative" }) {
+  async function prepareVaultDrafts(tracks: DraftTrack[]): Promise<DraftTrack[]> {
+    if (!tracks.length) return tracks;
+    setBusy("vaulting");
+    setError("");
+    setPipelineItem({ current: 1, total: tracks.length });
+    const prepared: DraftTrack[] = [];
+
+    for (let index = 0; index < tracks.length; index++) {
+      const track = tracks[index];
+      setPipelineItem({ current: index + 1, total: tracks.length });
+      setMessage(
+        tracks.length === 1
+          ? "Converting & normalizing to −16 LUFS…"
+          : `Normalizing ${index + 1}/${tracks.length} to −16 LUFS…`,
+      );
+
+      if (track.vaultReady && track.dropboxLink && track.dropboxDl && track.dropboxPath) {
+        prepared.push(track);
+        continue;
+      }
+
+      const form = new FormData();
+      if (track.localFile) {
+        form.append("audio", track.localFile, track.localFile.name);
+      }
+      if (track.dropboxLink.trim() && !track.vaultReady) {
+        form.append("dropboxLink", track.dropboxLink.trim());
+      }
+      if (track.sourceDropboxPath?.trim()) {
+        form.append("sourceDropboxPath", track.sourceDropboxPath.trim());
+      }
+      if (track.stagingId) {
+        form.append("stagingId", track.stagingId);
+      }
+
+      const res = await fetch("/api/tracks/prepare-vault", {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        stagingId?: string;
+        id?: string;
+        dropboxLink?: string;
+        dropboxDl?: string;
+        dropboxPath?: string;
+        sourceDropboxPath?: string | null;
+        sourceFolderLink?: string | null;
+      };
+
+      if (!res.ok || !data.dropboxLink || !data.dropboxDl || !data.dropboxPath) {
+        setBusy("idle");
+        setPipelineItem(null);
+        setAiPending(false);
+        setError(data.error || `Vault prepare failed for ${track.workingTitle || "track"}`);
+        if (prepared.length) {
+          setDrafts((prev) => {
+            const byClient = new Map(prepared.map((row) => [row.clientId, row]));
+            return prev.map((row) => byClient.get(row.clientId) ?? row);
+          });
+        }
+        throw new Error(data.error || "Vault prepare failed");
+      }
+
+      prepared.push({
+        ...track,
+        stagingId: data.stagingId || track.stagingId,
+        trackId: undefined,
+        dropboxLink: data.dropboxLink,
+        dropboxDl: data.dropboxDl,
+        dropboxPath: data.dropboxPath,
+        sourceDropboxPath: data.sourceDropboxPath || track.sourceDropboxPath,
+        sourceFolderLink: data.sourceFolderLink || undefined,
+        vaultReady: true,
+        localOnly: false,
+        // Keep localFile / localPreviewUrl as AI fallback if vault preview fetch fails.
+      });
+    }
+
+    setDrafts((prev) => {
+      const byClient = new Map(prepared.map((row) => [row.clientId, row]));
+      return prev.map((row) => byClient.get(row.clientId) ?? row);
+    });
+    setBusy("idle");
+    setPipelineItem(null);
+    setMessage(
+      prepared.length === 1
+        ? "Normalized — starting AI tag…"
+        : `${prepared.length} tracks normalized — starting AI tag…`,
+    );
+    return prepared;
+  }
+
+  async function vaultThenAi(
+    tracks: DraftTrack[],
+    opts?: { titleMode?: "keep" | "cleanup" | "creative"; force?: boolean },
+  ) {
     if (!tracks.length) {
       setAiPending(false);
       return;
     }
     setAiPending(true);
+    const needsStage = tracks.some((track) => !track.vaultReady);
+    // Keep the bar on Normalize between Locate → Stage (dup check happens here).
+    if (needsStage) {
+      setBusy("vaulting");
+      setPipelineItem({ current: 1, total: tracks.length });
+      setMessage(
+        tracks.length === 1
+          ? "Located — converting & normalizing…"
+          : `Located ${tracks.length} files — converting & normalizing…`,
+      );
+    }
     try {
       const { warnings, catalogTracks } = await fetchDuplicateMatches(tracks);
       setDupWarnings(warnings);
       setDupCatalogTracks(catalogTracks);
-      if (hasHardDuplicate(warnings)) {
+      if (!opts?.force && hasHardDuplicate(warnings)) {
         setHardDupProceed(false);
         setAiPending(false);
         setBusy("idle");
+        setPipelineItem(null);
         setMessage("");
         setError("");
         return;
       }
     } catch {
-      // If the check fails, still allow AI — import will re-check.
+      // If the check fails, still allow vault + AI — import will re-check.
     }
 
-    const withDuration = await probeMissingDurations(tracks);
-    setDrafts((prev) => {
-      const byId = new Map(withDuration.map((track) => [track.clientId, track]));
-      return prev.map((track) => byId.get(track.clientId) ?? track);
-    });
-    // Single-track auto-AI invents a library title (same as single Dropbox link).
-    // Multi keeps the last multi-batch choice (cleanup by default).
-    const titleMode =
-      opts?.titleMode ?? (tracks.length === 1 ? "creative" : multiTitleMode);
-    void submitForAi(withDuration, { force: true, titleMode });
+    try {
+      const vaulted = await prepareVaultDrafts(tracks);
+      const withDuration = await probeMissingDurations(vaulted);
+      setDrafts((prev) => {
+        const byId = new Map(withDuration.map((track) => [track.clientId, track]));
+        return prev.map((track) => byId.get(track.clientId) ?? track);
+      });
+      const titleMode =
+        opts?.titleMode ?? (withDuration.length === 1 ? "creative" : multiTitleMode);
+      void submitForAi(withDuration, { force: true, titleMode });
+    } catch (err) {
+      // Error already surfaced in prepareVaultDrafts.
+    }
+  }
+
+  async function maybeAutoAi(tracks: DraftTrack[], opts?: { titleMode?: "keep" | "cleanup" | "creative" }) {
+    void vaultThenAi(tracks, opts);
   }
 
   function proceedDespiteHardDup() {
     setHardDupProceed(true);
     setError("");
-    setMessage("Proceed unlocked — you can run AI and import again.");
+    setMessage("Proceed unlocked — normalizing then tagging…");
     setAiPending(true);
-    startAiWithRenameChoice(drafts, { force: true });
+    void vaultThenAi(drafts, { force: true });
   }
 
   function queueFromLinks(mp3Links: string[], opts?: { titleMode?: "keep" | "cleanup" | "creative" }) {
@@ -706,7 +982,7 @@ export function ImportForm({
         `Skipped ${links.length - audioLinks.length} non-audio link${links.length - audioLinks.length === 1 ? "" : "s"} — only MP3/WAV is accepted`,
       );
     }
-    if (audioLinks.length > 1) {
+    if (audioLinks.length) {
       setAiPending(true);
       setAiOptionsPrompt({
         trackCount: audioLinks.length,
@@ -714,7 +990,6 @@ export function ImportForm({
       });
       return;
     }
-    queueFromLinks(audioLinks, { titleMode: "creative" });
   }
 
   async function resolveFiles(
@@ -749,7 +1024,7 @@ export function ImportForm({
     } else {
       setError("");
     }
-    if (!opts?.skipPrompt && list.length > 1) {
+    if (!opts?.skipPrompt && list.length) {
       setAiPending(true);
       setAiOptionsPrompt({
         trackCount: list.length,
@@ -759,11 +1034,19 @@ export function ImportForm({
     }
 
     setBusy("resolving");
-    setMessage(`Looking up ${list.length} file${list.length === 1 ? "" : "s"} in Dropbox…`);
+    setPipelineItem({ current: 1, total: list.length });
+    setMessage(
+      list.length === 1
+        ? "Locating file in Dropbox…"
+        : `Locating ${list.length} files in Dropbox…`,
+    );
     const created: DraftTrack[] = [];
+    let fromDropbox = 0;
+    let localOnly = 0;
 
     for (const file of list) {
       const localPreviewUrl = URL.createObjectURL(file);
+      setPipelineItem({ current: created.length + 1, total: list.length });
       let res: Response;
       let data: { error?: string; dropboxLink?: string; path?: string } = {};
       try {
@@ -776,6 +1059,7 @@ export function ImportForm({
       } catch {
         URL.revokeObjectURL(localPreviewUrl);
         setBusy("idle");
+        setPipelineItem(null);
         setError(
           `Connection dropped while looking up ${file.name}. If you just restarted the server, wait a second and drop the file again.`,
         );
@@ -792,46 +1076,64 @@ export function ImportForm({
         return;
       }
 
-      if (!res.ok) {
-        URL.revokeObjectURL(localPreviewUrl);
-        setBusy("idle");
-        setError(data.error || `Could not find Dropbox link for ${file.name}`);
-        if (created.length) {
-          let next: DraftTrack[] = [];
-          setDrafts((prev) => {
-            next = [...prev, ...created];
-            return next;
-          });
-          resetTagState();
-          scrollToBatch();
-          void maybeAutoAi(next, { titleMode: opts?.titleMode });
-        }
-        return;
-      }
-
       const durationSec = await readDurationFromAudioUrl(localPreviewUrl);
       const duration = durationSec != null ? formatAudioDuration(durationSec) : "";
 
-      created.push({
-        ...emptyDraft(String(data.dropboxLink || ""), file.name),
-        sourceDropboxPath: data.path?.trim() || undefined,
-        localPreviewUrl,
-        duration,
-      });
+      if (res.ok && data.dropboxLink) {
+        fromDropbox += 1;
+        created.push({
+          ...emptyDraft(String(data.dropboxLink || ""), file.name),
+          sourceDropboxPath: data.path?.trim() || undefined,
+          localPreviewUrl,
+          localFile: file,
+          duration,
+        });
+      } else {
+        // Not on Dropbox — keep the local file and upload into the vault on import.
+        localOnly += 1;
+        created.push({
+          ...emptyDraft("", file.name),
+          localOnly: true,
+          localPreviewUrl,
+          localFile: file,
+          duration,
+        });
+      }
     }
 
-    let next: DraftTrack[] = [];
+    let mergedForAi: DraftTrack[] = created;
     setDrafts((prev) => {
-      next = [...prev, ...created];
-      return next;
+      mergedForAi = [...prev, ...created];
+      return mergedForAi;
     });
     setHardDupProceed(false);
     if (created.length) resetTagState();
-    // Keep results panels hidden until AI finishes.
     setAiPending(true);
     setBusy("idle");
+    setPipelineItem(null);
+    if (localOnly && fromDropbox) {
+      setError("");
+      setMessage(
+        `Located · ${fromDropbox} on Dropbox · ${localOnly} local — next: normalize to −16 LUFS`,
+      );
+    } else if (localOnly) {
+      setError("");
+      setMessage(
+        localOnly === 1
+          ? "Located · local file — next: convert & normalize to −16 LUFS"
+          : `Located · ${localOnly} local files — next: convert & normalize to −16 LUFS`,
+      );
+    } else {
+      setError("");
+      setMessage(
+        fromDropbox === 1
+          ? "Located on Dropbox — next: normalize to −16 LUFS"
+          : `Located ${fromDropbox} on Dropbox — next: normalize to −16 LUFS`,
+      );
+    }
     scrollToBatch();
-    void maybeAutoAi(next, { titleMode: opts?.titleMode });
+    // Prefer `created` if setState updater has not flushed yet (empty merge race).
+    void maybeAutoAi(mergedForAi.length ? mergedForAi : created, { titleMode: opts?.titleMode });
   }
 
   async function submitForAi(
@@ -872,6 +1174,7 @@ export function ImportForm({
     setAiPending(false);
     setAiScanClientId(keepQueueVisible ? current[0]?.clientId ?? null : null);
     setBusy("tagging");
+    setPipelineItem({ current: 1, total });
     setError("");
 
     type AiSuggestion = {
@@ -934,6 +1237,7 @@ export function ImportForm({
               ? `AI analyzing ${total} tracks…`
               : `AI analyzing ${from}–${to} of ${total}…`,
         );
+        setPipelineItem({ current: from, total });
 
         const form = new FormData();
         form.append(
@@ -951,15 +1255,42 @@ export function ImportForm({
 
         for (let i = 0; i < chunk.length; i++) {
           const track = chunk[i];
-          if (!track.localPreviewUrl) continue;
           try {
-            const blob = await fetch(track.localPreviewUrl).then((res) => res.blob());
-            const filename =
-              (track.workingTitle || track.libraryTitle || "track").replace(/[^\w.\- ]+/g, "_") +
-              (blob.type.includes("wav") ? ".wav" : ".mp3");
-            form.append(`audio_${i}`, blob, filename);
-          } catch {
-            // Server falls back to Dropbox fetch.
+            let blob: Blob | null = null;
+            let filename = `${(track.trackId || track.workingTitle || track.libraryTitle || "track").replace(/[^\w.\- ]+/g, "_")}.mp3`;
+            let source: "none" | "vaultPreview" | "localFile" | "localPreview" = "none";
+
+            // Prefer the normalized vault MP3 (same-origin preview proxy avoids Dropbox CORS).
+            if (track.vaultReady && track.dropboxLink.trim()) {
+              const preview = await fetch(
+                `/api/audio/preview?url=${encodeURIComponent(track.dropboxLink.trim())}`,
+              );
+              if (preview.ok) {
+                blob = await preview.blob();
+                filename = `${track.trackId || "track"}.mp3`;
+                source = "vaultPreview";
+              }
+            }
+
+            if (!blob && track.localFile) {
+              blob = track.localFile;
+              filename = track.localFile.name || filename;
+              source = "localFile";
+            }
+
+            if (!blob && track.localPreviewUrl) {
+              blob = await fetch(track.localPreviewUrl).then((res) => res.blob());
+              if (blob.type.includes("wav")) {
+                filename = filename.replace(/\.mp3$/i, ".wav");
+              }
+              source = "localPreview";
+            }
+
+            if (blob) {
+              form.append(`audio_${i}`, blob, filename);
+            }
+          } catch (err) {
+            // Server may still fetch Dropbox / vault link.
           }
         }
 
@@ -1065,6 +1396,7 @@ export function ImportForm({
       }
     } finally {
       setBusy("idle");
+      setPipelineItem(null);
       setAiPending(false);
       setAiScanClientId(null);
     }
@@ -1072,7 +1404,8 @@ export function ImportForm({
 
   function rerunAiForTrack(index: number) {
     const track = drafts[index];
-    if (!track?.dropboxLink.trim() || working) return;
+    if (!track || working) return;
+    if (!track.dropboxLink.trim() && !track.localPreviewUrl) return;
     void submitForAi([track], { titleMode: "creative", keepQueueVisible: true });
   }
 
@@ -1087,8 +1420,8 @@ export function ImportForm({
     }
 
     for (const track of drafts) {
-      if (!track.dropboxLink.trim()) {
-        setError("Every track needs a Dropbox link before import");
+      if (!track.dropboxLink.trim() && !track.localFile && !track.localPreviewUrl) {
+        setError("Every track needs a Dropbox link or a local audio file");
         return;
       }
     }
@@ -1148,38 +1481,83 @@ export function ImportForm({
     }
 
     setBusy("importing");
+    setPipelineItem({ current: 1, total: drafts.length || 1 });
     try {
-      const res = await fetch("/api/tracks/import", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          shared: {
-            ...shared,
-            composers: composerAssignments,
-          },
-          licenseEntry:
-            wantsLicenseEntry && canIssueLicense
-              ? licenseEntryToApiPayload(licenseEntry)
-              : null,
-          derivedFrom: isSingle ? derivedFrom : [],
-          tracks: drafts.map((track) => ({
-            dropboxLink: track.dropboxLink,
-            sourceDropboxPath: track.sourceDropboxPath || "",
-            workingTitle: track.workingTitle,
-            libraryTitle: track.libraryTitle,
-            description: track.description || shared.description || "",
-            duration: track.duration || "",
-            bpm: track.bpm || "",
-            musicalKey: track.musicalKey || "",
-            genre: track.genre || "",
-            mood: track.mood || "",
-            instruments: track.instruments || "",
-            attributes: track.attributes || "",
-          })),
-        }),
-      });
+      const payload = {
+        shared: {
+          ...shared,
+          composers: composerAssignments,
+        },
+        licenseEntry:
+          wantsLicenseEntry && canIssueLicense
+            ? licenseEntryToApiPayload(licenseEntry)
+            : null,
+        derivedFrom: isSingle ? derivedFrom : [],
+        tracks: drafts.map((track) => ({
+          id: track.trackId || "",
+          stagingId: track.stagingId || "",
+          dropboxLink: track.dropboxLink,
+          dropboxDl: track.dropboxDl || "",
+          dropboxPath: track.dropboxPath || "",
+          sourceDropboxPath: track.sourceDropboxPath || "",
+          sourceFolderLink: track.sourceFolderLink || "",
+          vaultReady: Boolean(track.vaultReady),
+          localOnly: Boolean(track.localOnly || (!track.dropboxLink.trim() && track.localFile)),
+          workingTitle: track.workingTitle,
+          libraryTitle: track.libraryTitle,
+          description: track.description || shared.description || "",
+          duration: track.duration || "",
+          bpm: track.bpm || "",
+          musicalKey: track.musicalKey || "",
+          genre: track.genre || "",
+          mood: track.mood || "",
+          instruments: track.instruments || "",
+          attributes: track.attributes || "",
+        })),
+      };
+
+      const needsMultipart = drafts.some(
+        (track) =>
+          !track.vaultReady &&
+          (track.localOnly || (!track.dropboxLink.trim() && (track.localFile || track.localPreviewUrl))),
+      );
+
+      let res: Response;
+      if (needsMultipart) {
+        const form = new FormData();
+        form.append("payload", JSON.stringify(payload));
+        for (let i = 0; i < drafts.length; i++) {
+          const track = drafts[i];
+          if (!track.localOnly && track.dropboxLink.trim()) continue;
+          try {
+            const file =
+              track.localFile ||
+              (track.localPreviewUrl
+                ? new File(
+                    [await fetch(track.localPreviewUrl).then((r) => r.blob())],
+                    track.workingTitle || track.libraryTitle || `track-${i}.mp3`,
+                  )
+                : null);
+            if (!file) continue;
+            const filename =
+              file.name ||
+              `${(track.workingTitle || track.libraryTitle || "track").replace(/[^\w.\- ]+/g, "_")}.mp3`;
+            form.append(`audio_${i}`, file, filename);
+          } catch {
+            // Import API will error if bytes are missing for local-only rows.
+          }
+        }
+        res = await fetch("/api/tracks/import", { method: "POST", body: form });
+      } else {
+        res = await fetch("/api/tracks/import", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+      }
       const data = await res.json().catch(() => ({}));
       setBusy("idle");
+      setPipelineItem(null);
 
       if (!res.ok) {
         setError(data.error || "Import failed");
@@ -1208,6 +1586,7 @@ export function ImportForm({
       });
     } catch {
       setBusy("idle");
+      setPipelineItem(null);
       setError(
         "Connection dropped during import. If the server just restarted, wait a moment and try Import again.",
       );
@@ -1271,30 +1650,56 @@ export function ImportForm({
   const working = busy !== "idle" || aiPending;
   /** Hide queue until Dropbox resolve / full-batch AI finish (not single-track rescan). */
   const isPipelineProcessing =
-    busy === "resolving" || aiPending || (busy === "tagging" && !aiScanClientId);
-  const showResults = drafts.length > 0 && !isPipelineProcessing;
+    busy === "resolving" ||
+    busy === "vaulting" ||
+    aiPending ||
+    (busy === "tagging" && !aiScanClientId);
+  const showPipelineProgress = isPipelineProcessing || busy === "importing";
+  const showResults = drafts.length > 0 && !isPipelineProcessing && busy !== "importing";
   const statusLabel =
     busy === "resolving"
-      ? "Looking up Dropbox…"
-      : busy === "tagging" || aiPending
-        ? "AI tagging…"
-        : busy === "importing"
-          ? "Importing…"
-          : null;
+      ? "Locating…"
+      : busy === "vaulting"
+        ? "Normalizing…"
+        : busy === "tagging" || aiPending
+          ? "AI tagging…"
+          : busy === "importing"
+            ? "Importing…"
+            : null;
+  const needsNormalize = drafts.some((track) => !track.vaultReady);
   const processingTitle =
-    busy === "resolving"
-      ? "Looking up Dropbox…"
-      : aiOptionsPrompt
-        ? "Before AI tagging…"
-        : "Analyzing audio…";
+    busy === "importing"
+      ? "Confirming import…"
+      : busy === "resolving"
+        ? message?.trim() || "Locating files…"
+        : busy === "vaulting"
+          ? message?.trim() || "Normalizing to −16 LUFS…"
+          : aiOptionsPrompt
+            ? "Choose AI options…"
+            : "AI tagging…";
   const processingDetail =
-    busy === "resolving"
-      ? "Finding the shared link for your file."
-      : aiOptionsPrompt
-        ? "Choose title mode and tag mode."
-        : isSingle || aiPending || busy === "tagging"
-          ? "Measuring tempo and key, then suggesting tags."
-          : "Preparing your upload…";
+    busy === "importing"
+      ? "Allocating catalog id and moving the staged MP3 into the vault."
+      : busy === "resolving"
+        ? "Matching Dropbox when possible. Local-only files stay here until normalize."
+        : busy === "vaulting"
+          ? "Convert → −16 LUFS MP3 → stage in Vault/_tmp. Catalog id is assigned only on Import."
+          : aiOptionsPrompt
+            ? "Pick title handling, then Run AI to continue."
+            : isSingle || aiPending || busy === "tagging"
+              ? "Reading the normalized MP3 for tempo, key, genre, and description."
+              : "Preparing your upload…";
+  const activePipelineStep: PipelineStepId = aiOptionsPrompt
+    ? "options"
+    : busy === "resolving"
+      ? "resolve"
+      : busy === "vaulting" || (aiPending && needsNormalize)
+        ? "stage"
+        : busy === "importing"
+          ? "import"
+          : busy === "tagging" || aiPending
+            ? "ai"
+            : "options";
 
   return (
     <form
@@ -1333,10 +1738,10 @@ export function ImportForm({
           }`}
         >
           <p className="text-sm font-medium text-[var(--ink)]">
-            {statusLabel || "Drop MP3 or WAV from Dropbox"}
+            {statusLabel || "Drop MP3 or WAV"}
           </p>
           <p className="mt-1 text-xs text-[var(--ink-dim)]">
-            1 track = AI runs automatically · multiple = shared manual tags · vault stores −16 LUFS MP3
+            Add → locate → normalize (−16 LUFS) → AI tag → confirm import
           </p>
           <button
             type="button"
@@ -1395,29 +1800,17 @@ export function ImportForm({
         </div>
       </section>
 
-      {isPipelineProcessing ? (
-        <section
-          ref={batchRef}
-          className="space-y-3 rounded-lg border border-[var(--line)] bg-[var(--bg-elevated)]/60 p-5"
-          aria-busy="true"
-          aria-live="polite"
-        >
-          <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
-            Processing
-          </h2>
-          <div className="flex items-start gap-3">
-            {!aiOptionsPrompt ? (
-              <span
-                className="mt-0.5 inline-block h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-[var(--line)] border-t-[var(--accent)]"
-                aria-hidden
-              />
-            ) : null}
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-[var(--ink)]">{processingTitle}</p>
-              <p className="mt-1 text-[11px] text-[var(--ink-dim)]">{processingDetail}</p>
-            </div>
-          </div>
-        </section>
+      {showPipelineProgress ? (
+        <div ref={batchRef}>
+          <ImportPipelineProgress
+            activeId={activePipelineStep}
+            itemCurrent={pipelineItem?.current}
+            itemTotal={pipelineItem?.total}
+            title={processingTitle}
+            detail={processingDetail}
+            waiting={Boolean(aiOptionsPrompt)}
+          />
+        </div>
       ) : null}
 
       {showResults ? (
@@ -1514,7 +1907,11 @@ export function ImportForm({
                             </label>
                             <button
                               type="button"
-                              disabled={working || hardDupBlocked || !track.dropboxLink.trim()}
+                              disabled={
+                                working ||
+                                hardDupBlocked ||
+                                (!track.dropboxLink.trim() && !track.localPreviewUrl)
+                              }
                               onClick={() => rerunAiForTrack(index)}
                               className="mt-0.5 shrink-0 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-[11px] text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:opacity-40"
                               title="Re-run AI on this track"
@@ -1538,15 +1935,37 @@ export function ImportForm({
                             </label>
                             <label className="block rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.18)] px-2.5 py-2">
                               <span className="mb-1 block text-[9px] font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
-                                Dropbox link
+                                {track.vaultReady
+                                  ? "Vault"
+                                  : track.localOnly || !track.dropboxLink.trim()
+                                    ? "Source"
+                                    : "Dropbox link"}
                               </span>
-                              <input
-                                value={track.dropboxLink}
-                                onChange={(e) => updateDraft(index, { dropboxLink: e.target.value })}
-                                className="w-full truncate bg-transparent font-mono text-[11px] leading-snug text-[var(--ink-dim)] outline-none"
-                                placeholder="https://www.dropbox.com/..."
-                                title={track.dropboxLink}
-                              />
+                              {track.vaultReady ? (
+                                <p
+                                  className="truncate text-[11px] leading-snug text-[var(--ink-muted)]"
+                                  title={track.dropboxPath || track.stagingId || track.trackId}
+                                >
+                                  Staged · −16 LUFS MP3
+                                  {track.trackId ? ` · ${track.trackId}` : ""}
+                                </p>
+                              ) : track.localOnly || !track.dropboxLink.trim() ? (
+                                <p
+                                  className="truncate text-[11px] leading-snug text-[var(--ink-muted)]"
+                                  title={track.localFile?.name || track.workingTitle}
+                                >
+                                  Local file → vault next
+                                  {track.localFile?.name ? ` · ${track.localFile.name}` : ""}
+                                </p>
+                              ) : (
+                                <input
+                                  value={track.dropboxLink}
+                                  onChange={(e) => updateDraft(index, { dropboxLink: e.target.value })}
+                                  className="w-full truncate bg-transparent font-mono text-[11px] leading-snug text-[var(--ink-dim)] outline-none"
+                                  placeholder="https://www.dropbox.com/..."
+                                  title={track.dropboxLink}
+                                />
+                              )}
                             </label>
                           </div>
 
