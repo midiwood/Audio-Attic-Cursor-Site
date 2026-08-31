@@ -1,14 +1,10 @@
-import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession, isSubscriber } from "@/lib/auth";
-import { GUEST_PLAYLIST_COOKIE } from "@/lib/guest-playlist";
-import {
-  getPlaylistByGuestToken,
-  playlistContainsTrack,
-} from "@/lib/playlists";
+import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { getTrackById } from "@/lib/queries";
-import { formatDisplayTitle } from "@/lib/tracks";
+import { formatAudioDownloadLabel } from "@/lib/tracks";
 import { isSubscriberVisible } from "@/lib/publisher";
+import { getTrackAssetForTrack } from "@/lib/track-assets";
 
 export const runtime = "nodejs";
 
@@ -16,18 +12,10 @@ function safeFilename(name: string) {
   return name.replace(/[^\w.\- ()[\]]+/g, "_").slice(0, 120) || "track";
 }
 
-async function guestMayAccessTrack(trackId: string): Promise<boolean> {
-  const jar = await cookies();
-  const token = jar.get(GUEST_PLAYLIST_COOKIE)?.value;
-  if (!token) return false;
-  const playlist = getPlaylistByGuestToken(token);
-  if (!playlist) return false;
-  return playlistContainsTrack(playlist.id, trackId);
-}
-
 export async function GET(req: NextRequest) {
   const session = await getApiSession();
   const id = req.nextUrl.searchParams.get("id");
+  const assetId = req.nextUrl.searchParams.get("asset")?.trim() || "";
   const download = req.nextUrl.searchParams.get("download") === "1";
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
@@ -40,15 +28,33 @@ export async function GET(req: NextRequest) {
   }
 
   const track = getTrackById(id);
-  if (!track?.dropboxDl) {
+  if (!track) {
     return NextResponse.json({ error: "Track or audio not found" }, { status: 404 });
   }
   if (session && isSubscriber(session) && !isSubscriberVisible(track)) {
     return NextResponse.json({ error: "Track not found" }, { status: 404 });
   }
 
+  let dropboxDl = track.dropboxDl;
+  let downloadLabel = formatAudioDownloadLabel(track);
+
+  if (assetId) {
+    const asset = getTrackAssetForTrack(id, assetId);
+    if (!asset?.dropboxDl) {
+      return NextResponse.json({ error: "Asset not found" }, { status: 404 });
+    }
+    dropboxDl = asset.dropboxDl;
+    downloadLabel = formatAudioDownloadLabel(
+      track,
+      asset.label,
+      asset.kind === "stem" || asset.kind === "version" ? asset.kind : null,
+    );
+  } else if (!dropboxDl) {
+    return NextResponse.json({ error: "Track or audio not found" }, { status: 404 });
+  }
+
   const range = download ? undefined : (req.headers.get("range") ?? undefined);
-  const upstream = await fetch(track.dropboxDl, {
+  const upstream = await fetch(dropboxDl, {
     headers: range ? { Range: range } : undefined,
     redirect: "follow",
   });
@@ -90,8 +96,8 @@ export async function GET(req: NextRequest) {
   }
 
   if (download) {
-    const title = safeFilename(formatDisplayTitle(track));
-    const ext = track.dropboxDl.toLowerCase().includes(".wav") ? "wav" : "mp3";
+    const title = safeFilename(downloadLabel);
+    const ext = dropboxDl.toLowerCase().includes(".wav") ? "wav" : "mp3";
     headers.set("content-disposition", `attachment; filename="${title}.${ext}"`);
   }
 

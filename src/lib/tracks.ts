@@ -253,3 +253,24 @@ export function formatDisplayTitle(track: {
 }): string {
   return track.libraryTitle?.trim() || track.workingTitle?.trim() || track.id;
 }
+
+/** Download filename base: title, composer, optional asset label. */
+export function formatAudioDownloadLabel(
+  track: {
+    libraryTitle?: string | null;
+    workingTitle?: string | null;
+    id: string;
+    artist?: string | null;
+  },
+  assetLabel?: string | null,
+  assetKind?: "version" | "stem" | null,
+): string {
+  const parts = [formatDisplayTitle(track)];
+  const composer = track.artist?.trim();
+  if (composer) parts.push(composer);
+  const extra = assetLabel?.trim();
+  if (extra) {
+    parts.push(assetKind === "stem" ? `Stem-${extra}` : extra);
+  }
+  return parts.join("_");
+}

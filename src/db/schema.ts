@@ -212,6 +212,31 @@ export const trackWaveforms = sqliteTable("track_waveforms", {
   updatedAt: text("updated_at").notNull(),
 });
 
+/** Alternate mixes and stems under one catalog track ID (main mix stays on tracks). */
+export const trackAudioAssets = sqliteTable(
+  "track_audio_assets",
+  {
+    id: text("id").primaryKey(),
+    trackId: text("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    /** version | stem */
+    kind: text("kind").notNull(),
+    label: text("label").notNull(),
+    slug: text("slug").notNull(),
+    dropboxLink: text("dropbox_link"),
+    dropboxDl: text("dropbox_dl"),
+    dropboxPath: text("dropbox_path"),
+    duration: text("duration"),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("track_audio_assets_track_idx").on(table.trackId),
+    index("track_audio_assets_track_kind_idx").on(table.trackId, table.kind),
+  ],
+);
+
 /** Past/current Library (and similar) deals — many per track. Staff only. */
 export const trackLicenseEntries = sqliteTable(
   "track_license_entries",
@@ -288,6 +313,8 @@ export type PlaylistShare = typeof playlistShares.$inferSelect;
 export type TrackRelation = typeof trackRelations.$inferSelect;
 export type NewTrackRelation = typeof trackRelations.$inferInsert;
 export type TrackWaveform = typeof trackWaveforms.$inferSelect;
+export type TrackAudioAsset = typeof trackAudioAssets.$inferSelect;
+export type NewTrackAudioAsset = typeof trackAudioAssets.$inferInsert;
 export type TrackLicenseEntry = typeof trackLicenseEntries.$inferSelect;
 export type NewTrackLicenseEntry = typeof trackLicenseEntries.$inferInsert;
 export type LicenseRequest = typeof licenseRequests.$inferSelect;

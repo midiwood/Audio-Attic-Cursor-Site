@@ -164,3 +164,50 @@ export function guessSourceExt(hint: string): string {
   if (/\.m4a(?:$|\?)/i.test(lower) || lower.includes("m4a")) return "m4a";
   return "mp3";
 }
+
+/** Transcode to MP3 for browser playback — no loudness normalization. */
+export async function transcodeToPlaybackMp3(
+  bytes: Buffer,
+  mimeOrFilenameHint = "audio/mpeg",
+): Promise<Buffer> {
+  if (!bytes.length) throw new Error("No audio bytes to transcode");
+  const lower = mimeOrFilenameHint.toLowerCase();
+  if (/\.mp3(?:$|\?)/i.test(lower) || (lower.includes("mpeg") && !lower.includes("wav"))) {
+    return bytes;
+  }
+
+  const dir = await mkdtemp(path.join(os.tmpdir(), "attic-transcode-"));
+  const inputPath = path.join(dir, `input${extForHint(mimeOrFilenameHint)}`);
+  const outputPath = path.join(dir, "output.mp3");
+
+  try {
+    await writeFile(inputPath, bytes);
+    const result = await spawnCapture("ffmpeg", [
+      "-hide_banner",
+      "-y",
+      "-i",
+      inputPath,
+      "-ar",
+      "44100",
+      "-ac",
+      "2",
+      "-c:a",
+      "libmp3lame",
+      "-b:a",
+      MP3_BITRATE,
+      outputPath,
+    ]);
+    if (result.code !== 0) {
+      const detail = result.stderr.trim().split("\n").slice(-4).join(" ");
+      throw new Error(`ffmpeg transcode failed${detail ? `: ${detail}` : ""}`);
+    }
+    return await readFile(outputPath);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      throw new Error("ffmpeg is not installed or not on PATH");
+    }
+    throw err;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => undefined);
+  }
+}

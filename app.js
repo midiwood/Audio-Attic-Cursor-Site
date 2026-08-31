@@ -16,12 +16,14 @@ const next = require("next");
 
 const dir = __dirname;
 const nextDir = path.join(dir, ".next");
+const buildIdPath = path.join(nextDir, "BUILD_ID");
 
-if (!fs.existsSync(nextDir)) {
+if (!fs.existsSync(nextDir) || !fs.existsSync(buildIdPath)) {
   console.error(
-    "[audio-attic] Missing .next build. In the Application root run:\n" +
-      "  npm run build\n" +
-      "Then Restart the Node.js app in cPanel.",
+    "[audio-attic] Missing production build (.next/BUILD_ID).\n" +
+      "The .next folder is missing or looks like a leftover from `npm run dev`, not `npm run build`.\n" +
+      "  Production: npm run build && npm start\n" +
+      "  Local development: npm run dev",
   );
   process.exit(1);
 }

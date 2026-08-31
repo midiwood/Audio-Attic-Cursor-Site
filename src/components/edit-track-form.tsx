@@ -13,6 +13,7 @@ import { MetaSuggestInput } from "@/components/meta-suggest-input";
 import { SharedTagPicker } from "@/components/shared-tag-picker";
 import { TrackLicenseSection } from "@/components/track-license-section";
 import { TrackLineageLinker } from "@/components/track-lineage-linker";
+import { TrackAssetsPanel } from "@/components/track-assets-panel";
 import { aiSuggestStatusMessage, fetchAiTrackSuggestion } from "@/lib/run-ai-suggest";
 import type { CatalogMetaSuggestions } from "@/lib/queries";
 import {
@@ -290,6 +291,12 @@ export function EditTrackForm({
           </div>
         ) : null}
       </section>
+
+      <TrackAssetsPanel
+        trackId={track.id}
+        trackTitle={formatDisplayTitle(track)}
+        canEdit
+      />
 
       <TrackLineageLinker
         excludeTrackId={track.id}

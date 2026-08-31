@@ -2,7 +2,7 @@ import "server-only";
 
 import type { Track } from "@/db/schema";
 import { MAX_ZIP_TRACKS, safeAudioFilename } from "@/lib/audio-download-shared";
-import { formatDisplayTitle } from "@/lib/tracks";
+import { formatAudioDownloadLabel } from "@/lib/tracks";
 
 export { MAX_ZIP_TRACKS, safeAudioFilename } from "@/lib/audio-download-shared";
 
@@ -11,7 +11,7 @@ function trackFileExt(dropboxDl: string) {
 }
 
 function uniqueZipEntryName(track: Track, used: Set<string>) {
-  const base = safeAudioFilename(formatDisplayTitle(track));
+  const base = safeAudioFilename(formatAudioDownloadLabel(track));
   const ext = trackFileExt(track.dropboxDl || "");
   let name = `${base}.${ext}`;
   if (used.has(name)) {

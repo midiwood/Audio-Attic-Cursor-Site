@@ -26,6 +26,8 @@ export type PlayerTrack = {
   duration?: string | null;
   dropboxDl?: string | null;
   license?: string | null;
+  /** Version or stem asset id for /api/audio?id=&asset= */
+  assetId?: string | null;
   /**
    * Stream URL for tracks not yet in the catalog (import preview / blob).
    * When set, the bottom player uses this instead of `/api/audio?id=…`.
@@ -37,12 +39,12 @@ export type PlayerTrack = {
 
 function resolveStreamUrl(track: PlayerTrack): string | null {
   if (track.audioSrc) return track.audioSrc;
-  if (track.dropboxDl) return audioUrlFor(track.id);
+  if (track.dropboxDl || track.assetId) return audioUrlFor(track.id, track.assetId);
   return null;
 }
 
 function isPlayableTrack(track: PlayerTrack): boolean {
-  return Boolean(track.audioSrc || track.dropboxDl);
+  return Boolean(track.audioSrc || track.dropboxDl || track.assetId);
 }
 
 export { isPlayableTrack };
@@ -194,8 +196,10 @@ function PlayerProgressHost({
   );
 }
 
-function audioUrlFor(trackId: string) {
-  return `/api/audio?id=${encodeURIComponent(trackId)}`;
+export function audioUrlFor(trackId: string, assetId?: string | null) {
+  const params = new URLSearchParams({ id: trackId });
+  if (assetId) params.set("asset", assetId);
+  return `/api/audio?${params.toString()}`;
 }
 
 function waveformUrlFor(trackId: string) {

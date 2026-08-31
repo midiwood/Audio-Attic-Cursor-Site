@@ -14,6 +14,7 @@ import {
 } from "@/components/composer-picker";
 import { SharedTagPicker } from "@/components/shared-tag-picker";
 import { TrackLineageLinker } from "@/components/track-lineage-linker";
+import { TrackAssetsPanel } from "@/components/track-assets-panel";
 import { usePlayer, type PlayerTrack } from "@/components/player-provider";
 import {
   audioFileTypeFromUrls,
@@ -452,6 +453,12 @@ function InlineTrackView({
           ))}
         </dl>
       </div>
+
+      <TrackAssetsPanel
+        trackId={track.id}
+        trackTitle={formatDisplayTitle(track)}
+        canEdit={false}
+      />
 
       {!subscriberView && lineage.length ? (
         <section className="mt-5 rounded-lg border border-[var(--accent)]/35 bg-[var(--accent-soft)]/40 p-3">
@@ -971,6 +978,12 @@ function InlineTrackEditor({
           />
         </div>
       </div>
+
+      <TrackAssetsPanel
+        trackId={track.id}
+        trackTitle={formatDisplayTitle(track)}
+        canEdit
+      />
     </form>
   );
 }

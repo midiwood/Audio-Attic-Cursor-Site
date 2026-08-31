@@ -130,6 +130,8 @@ export function ComposersManager({ initialComposers }: { initialComposers: Compo
       linked?: number;
       skipped?: number;
       unmatchedNames?: string[];
+      emptyArtistLinked?: number;
+      seeded?: string[];
     };
     setBackfillBusy(false);
     if (!res.ok) {

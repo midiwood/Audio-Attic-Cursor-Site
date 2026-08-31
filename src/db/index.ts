@@ -785,5 +785,28 @@ CREATE INDEX IF NOT EXISTS track_composers_track_sort_idx ON track_composers(tra
   console.error("[db] composer tables failed", err);
 }
 
+try {
+  sqlite.exec(`
+CREATE TABLE IF NOT EXISTS track_audio_assets (
+  id TEXT PRIMARY KEY,
+  track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL,
+  label TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  dropbox_link TEXT,
+  dropbox_dl TEXT,
+  dropbox_path TEXT,
+  duration TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  UNIQUE(track_id, kind, slug)
+);
+CREATE INDEX IF NOT EXISTS track_audio_assets_track_idx ON track_audio_assets(track_id);
+CREATE INDEX IF NOT EXISTS track_audio_assets_track_kind_idx ON track_audio_assets(track_id, kind);
+`);
+} catch (err) {
+  console.error("[db] track_audio_assets table failed", err);
+}
+
 export const db = drizzle(sqlite, { schema: fullSchema });
 export { sqlite };

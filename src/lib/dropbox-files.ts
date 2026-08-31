@@ -42,6 +42,20 @@ export function vaultStagingMp3Path(stagingId: string): string {
   return `${vaultStagingFolderPath(stagingId)}/track.mp3`;
 }
 
+export function vaultVersionMp3Path(trackId: string, slug: string): string {
+  const id = trackId.trim();
+  const key = slug.trim();
+  if (!id || !key) throw new Error("trackId and slug are required");
+  return `${vaultRoot()}/${id}/versions/${key}.mp3`;
+}
+
+export function vaultStemMp3Path(trackId: string, slug: string): string {
+  const id = trackId.trim();
+  const key = slug.trim();
+  if (!id || !key) throw new Error("trackId and slug are required");
+  return `${vaultRoot()}/${id}/stems/${key}.mp3`;
+}
+
 export function isVaultStagingPath(path: string | null | undefined): boolean {
   const p = String(path || "").replace(/\\/g, "/");
   const root = vaultRoot().toLowerCase();
@@ -73,6 +87,72 @@ async function dropboxJson<T>(
   return { ok: true, data: data as T };
 }
 
+function dropboxErrorSummary(data: unknown): string {
+  return String(
+    (data as { error_summary?: string })?.error_summary ||
+      (data as { error?: { ".tag"?: string } })?.error?.[".tag"] ||
+      "",
+  ).toLowerCase();
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Retry Dropbox JSON calls when rate-limited (429). */
+async function dropboxJsonWithRetry<T>(
+  token: string,
+  url: string,
+  body: unknown,
+  opts?: { maxAttempts?: number },
+): Promise<{ ok: true; data: T } | { ok: false; status: number; data: unknown }> {
+  const maxAttempts = opts?.maxAttempts ?? 6;
+  let last: { ok: false; status: number; data: unknown } = {
+    ok: false,
+    status: 0,
+    data: {},
+  };
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const result = await dropboxJson<T>(token, url, body);
+    if (result.ok) return result;
+    last = result;
+    if (result.status !== 429 || attempt >= maxAttempts - 1) return result;
+    await sleep(Math.min(15000, 1500 * 2 ** attempt));
+  }
+
+  return last;
+}
+
+/** Retry raw Dropbox fetch calls when rate-limited (429). */
+async function dropboxFetchWithRetry(
+  url: string,
+  init: RequestInit,
+  opts?: { maxAttempts?: number },
+): Promise<Response> {
+  const maxAttempts = opts?.maxAttempts ?? 6;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(url, init);
+    if (res.status !== 429 || attempt >= maxAttempts - 1) return res;
+    await sleep(Math.min(15000, 1500 * 2 ** attempt));
+  }
+
+  return fetch(url, init);
+}
+
+async function pathExists(token: string, path: string): Promise<boolean> {
+  const result = await dropboxJsonWithRetry<{ metadata?: unknown }>(
+    token,
+    "https://api.dropboxapi.com/2/files/get_metadata",
+    { path },
+  );
+  if (result.ok) return true;
+  const summary = dropboxErrorSummary(result.data);
+  if (summary.includes("not_found")) return false;
+  throw new Error(formatDropboxApiError(result.data, result.status, `Could not read ${path}`));
+}
+
 export async function ensureFolder(folderPath: string): Promise<void> {
   const normalized = folderPath.replace(/\/+$/, "");
   if (!normalized || normalized === "/") return;
@@ -82,7 +162,7 @@ export async function ensureFolder(folderPath: string): Promise<void> {
     let current = "";
     for (const segment of segments) {
       current += `/${segment}`;
-      const result = await dropboxJson<{ metadata?: unknown }>(
+      const result = await dropboxJsonWithRetry<{ metadata?: unknown }>(
         token,
         "https://api.dropboxapi.com/2/files/create_folder_v2",
         { path: current, autorename: false },
@@ -114,7 +194,7 @@ export async function uploadFile(path: string, bytes: Buffer): Promise<void> {
   if (folder) await ensureFolder(folder);
 
   await withDropboxToken(async (token) => {
-    const res = await fetch("https://content.dropboxapi.com/2/files/upload", {
+    const res = await dropboxFetchWithRetry("https://content.dropboxapi.com/2/files/upload", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -137,7 +217,7 @@ export async function uploadFile(path: string, bytes: Buffer): Promise<void> {
 
 export async function createOrGetSharedLink(path: string): Promise<string> {
   return withDropboxToken(async (token) => {
-    const createRes = await fetch(
+    const createRes = await dropboxFetchWithRetry(
       "https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings",
       {
         method: "POST",
@@ -167,14 +247,17 @@ export async function createOrGetSharedLink(path: string): Promise<string> {
       err?.error?.[".tag"] === "shared_link_already_exists";
 
     if (alreadyExists) {
-      const listRes = await fetch("https://api.dropboxapi.com/2/sharing/list_shared_links", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
+      const listRes = await dropboxFetchWithRetry(
+        "https://api.dropboxapi.com/2/sharing/list_shared_links",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path, direct_only: true }),
         },
-        body: JSON.stringify({ path, direct_only: true }),
-      });
+      );
       const listData = await listRes.json().catch(() => ({}));
       const url = listData?.links?.[0]?.url;
       if (url) return String(url);
@@ -307,11 +390,26 @@ export async function uploadIntoVaultStaging(opts: {
   };
 }
 
+/** Upload vault file and create share links. */
+export async function uploadVaultAudioFile(
+  dropboxPath: string,
+  bytes: Buffer,
+): Promise<{ dropboxPath: string; dropboxLink: string; dropboxDl: string }> {
+  await uploadFile(dropboxPath, bytes);
+  const dropboxLink = await createOrGetSharedLink(dropboxPath);
+  if (!dropboxLink) throw new Error("Vault upload succeeded but no shared link was created");
+  return {
+    dropboxPath,
+    dropboxLink,
+    dropboxDl: toDropboxDlUrl(dropboxLink),
+  };
+}
+
 async function deletePath(path: string): Promise<void> {
   const normalized = path.replace(/\/+$/, "");
   if (!normalized) return;
   await withDropboxToken(async (token) => {
-    const result = await dropboxJson(
+    const result = await dropboxJsonWithRetry(
       token,
       "https://api.dropboxapi.com/2/files/delete_v2",
       { path: normalized },
@@ -325,6 +423,11 @@ async function deletePath(path: string): Promise<void> {
       formatDropboxApiError(result.data, result.status, `Could not delete ${normalized}`),
     );
   });
+}
+
+/** Best-effort delete of a vault audio file (versions/stems). */
+export async function deleteVaultFile(path: string): Promise<void> {
+  await deletePath(path);
 }
 
 /**
@@ -355,54 +458,69 @@ export async function promoteVaultStaging(opts: {
   const toFolder = parentPath(toPath);
 
   await withDropboxToken(async (token) => {
-    // Move whole staging folder → {trackId}/ so we never create an empty dest first.
-    if (fromFolder && toFolder && fromFolder === parentPath(fromFile)) {
-      const folderMove = await dropboxJson(
-        token,
-        "https://api.dropboxapi.com/2/files/move_v2",
-        {
-          from_path: fromFolder,
-          to_path: toFolder,
-          autorename: false,
-          allow_ownership_transfer: false,
-        },
-      );
-      if (folderMove.ok) return;
+    // Idempotent retry: staging already promoted on a prior partial import.
+    if (!(await pathExists(token, fromFile)) && (await pathExists(token, toPath))) {
+      return;
+    }
 
-      const summary = String(
-        (folderMove.data as { error_summary?: string })?.error_summary || "",
-      ).toLowerCase();
-      if (!summary.includes("conflict") && !summary.includes("not_found")) {
-        throw new Error(
-          formatDropboxApiError(
-            folderMove.data,
-            folderMove.status,
-            `Could not promote staging folder to ${toFolder}`,
-          ),
+    // Prefer moving the whole staging folder when the destination folder is free.
+    if (fromFolder && toFolder && fromFolder === parentPath(fromFile)) {
+      if (!(await pathExists(token, toFolder))) {
+        const folderMove = await dropboxJsonWithRetry(
+          token,
+          "https://api.dropboxapi.com/2/files/move_v2",
+          {
+            from_path: fromFolder,
+            to_path: toFolder,
+            autorename: false,
+            allow_ownership_transfer: false,
+          },
         );
+        if (folderMove.ok) return;
+
+        const summary = dropboxErrorSummary(folderMove.data);
+        if (!summary.includes("conflict") && !summary.includes("not_found")) {
+          throw new Error(
+            formatDropboxApiError(
+              folderMove.data,
+              folderMove.status,
+              `Could not promote staging folder to ${toFolder}`,
+            ),
+          );
+        }
       }
     }
 
     if (toFolder) await ensureFolder(toFolder);
 
-    const fileMove = await dropboxJson(
-      token,
-      "https://api.dropboxapi.com/2/files/move_v2",
-      {
+    const tryFileMove = async () =>
+      dropboxJsonWithRetry(token, "https://api.dropboxapi.com/2/files/move_v2", {
         from_path: fromFile,
         to_path: toPath,
         autorename: false,
         allow_ownership_transfer: false,
-      },
-    );
+      });
+
+    let fileMove = await tryFileMove();
     if (!fileMove.ok) {
-      throw new Error(
-        formatDropboxApiError(
-          fileMove.data,
-          fileMove.status,
-          `Could not promote staging file to ${toPath}`,
-        ),
-      );
+      let fileSummary = dropboxErrorSummary(fileMove.data);
+      if (fileSummary.includes("not_found") && (await pathExists(token, toPath))) {
+        return;
+      }
+      if (fileSummary.includes("conflict")) {
+        await deletePath(toPath);
+        fileMove = await tryFileMove();
+        fileSummary = fileMove.ok ? "" : dropboxErrorSummary(fileMove.data);
+      }
+      if (!fileMove.ok) {
+        throw new Error(
+          formatDropboxApiError(
+            fileMove.data,
+            fileMove.status,
+            `Could not promote staging file to ${toPath}`,
+          ),
+        );
+      }
     }
   });
 

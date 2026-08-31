@@ -517,7 +517,7 @@ export function ImportForm({
   } | null>(null);
   /** When set, AI is rescanning one queue row without hiding the queue. */
   const [aiScanClientId, setAiScanClientId] = useState<string | null>(null);
-  const batchRef = useRef<HTMLElement | null>(null);
+  const batchRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   /** Persists AI modal choices across async vault/AI steps and re-run. */
   const aiSessionOptsRef = useRef<AiSessionOpts>({
@@ -960,6 +960,35 @@ export function ImportForm({
       }
     }
 
+    const notVaultReady = drafts.filter(
+      (track) => (track.localFile || track.localPreviewUrl) && !track.vaultReady,
+    );
+    let tracksToImport = drafts;
+    if (notVaultReady.length) {
+      setPipelinePhase("normalize");
+      setPipelineItem({ current: 1, total: notVaultReady.length });
+      setMessage(
+        notVaultReady.length === 1
+          ? "Normalizing to vault before import…"
+          : `Normalizing ${notVaultReady.length} tracks before import…`,
+      );
+      try {
+        tracksToImport = await normalizeTracksToVault({
+          tracks: drafts,
+          onTrackProgress: (current, total, msg) => {
+            setPipelineItem({ current, total });
+            setMessage(msg);
+          },
+        });
+        setDrafts((prev) => mergeDraftUpdates(prev, tracksToImport));
+      } catch (err) {
+        setPipelinePhase("idle");
+        setPipelineItem(null);
+        setError(err instanceof Error ? err.message : "Normalization failed before import");
+        return;
+      }
+    }
+
     if (hardDupBlocked) {
       setError(
         "This file is already in the database. Verify the existing track below, or click Proceed anyway.",
@@ -1015,7 +1044,7 @@ export function ImportForm({
     }
 
     setPipelinePhase("import");
-    setPipelineItem({ current: 1, total: drafts.length || 1 });
+    setPipelineItem({ current: 1, total: tracksToImport.length || 1 });
     try {
       const payload = {
         shared: {
@@ -1027,7 +1056,7 @@ export function ImportForm({
             ? licenseEntryToApiPayload(licenseEntry)
             : null,
         derivedFrom: isSingle ? derivedFrom : [],
-        tracks: drafts.map((track) => ({
+        tracks: tracksToImport.map((track) => ({
           id: track.trackId || "",
           stagingId: track.stagingId || "",
           dropboxLink: track.dropboxLink,
@@ -1050,7 +1079,7 @@ export function ImportForm({
         })),
       };
 
-      const needsMultipart = drafts.some(
+      const needsMultipart = tracksToImport.some(
         (track) => !track.vaultReady && (track.localFile || track.localPreviewUrl),
       );
 
@@ -1058,8 +1087,8 @@ export function ImportForm({
       if (needsMultipart) {
         const form = new FormData();
         form.append("payload", JSON.stringify(payload));
-        for (let i = 0; i < drafts.length; i++) {
-          const track = drafts[i];
+        for (let i = 0; i < tracksToImport.length; i++) {
+          const track = tracksToImport[i];
           if (track.vaultReady) continue;
           try {
             const file =
