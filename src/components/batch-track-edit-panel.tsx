@@ -65,35 +65,39 @@ function toDateInputValue(raw: string | null | undefined): string {
 function CurrentValues({
   values,
   onPick,
+  preview,
 }: {
   values: string[];
   onPick?: (value: string) => void;
+  preview?: (value: string) => string;
 }) {
   if (!values.length) {
     return <p className="mt-1 text-[10px] text-[var(--ink-dim)]">None set on selected tracks</p>;
   }
   return (
     <div className="mt-1 flex flex-wrap gap-1">
-      {values.map((value) =>
-        onPick ? (
+      {values.map((value) => {
+        const label = preview ? preview(value) : value;
+        return onPick ? (
           <button
             key={value}
             type="button"
             onClick={() => onPick(value)}
-            className="rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.18)] px-1.5 py-0.5 text-[11px] text-[var(--ink-muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
+            className="max-w-full rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.18)] px-1.5 py-0.5 text-left text-[11px] text-[var(--ink-muted)] hover:border-[var(--accent)] hover:text-[var(--ink)]"
             title="Use this value for all selected tracks"
           >
-            {value}
+            {label}
           </button>
         ) : (
           <span
             key={value}
-            className="rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.18)] px-1.5 py-0.5 text-[11px] text-[var(--ink-muted)]"
+            className="max-w-full rounded-md border border-[var(--line)] bg-[rgba(0,0,0,0.18)] px-1.5 py-0.5 text-[11px] text-[var(--ink-muted)]"
+            title={value}
           >
-            {value}
+            {label}
           </span>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -136,6 +140,7 @@ export function BatchTrackEditPanel({
       tracks.map((t) => toDateInputValue(t.date) || String(t.date || "").trim()),
     );
     const licenses = uniqueValues(tracks.map((t) => canonicalizeLicense(t.license)));
+    const notes = uniqueValues(tracks.map((t) => t.notes));
     return {
       clients,
       projects,
@@ -144,6 +149,7 @@ export function BatchTrackEditPanel({
       years,
       dates,
       licenses,
+      notes,
       shared: {
         client: sharedValue(tracks.map((t) => t.client)),
         project: sharedValue(tracks.map((t) => t.project)),
@@ -152,6 +158,7 @@ export function BatchTrackEditPanel({
         year: sharedValue(tracks.map((t) => (t.year != null ? String(t.year) : ""))),
         date: sharedValue(tracks.map((t) => toDateInputValue(t.date))),
         license: sharedValue(tracks.map((t) => canonicalizeLicense(t.license))),
+        notes: sharedValue(tracks.map((t) => t.notes)),
       },
     };
   }, [tracks]);
@@ -170,6 +177,7 @@ export function BatchTrackEditPanel({
   const [year, setYear] = useState(current.shared.year);
   const [publicationDate, setPublicationDate] = useState(current.shared.date);
   const [license, setLicense] = useState<string>(current.shared.license || UNCHANGED);
+  const [notes, setNotes] = useState(current.shared.notes);
   const [showDeal, setShowDeal] = useState(false);
   const [licenseEntry, setLicenseEntry] = useState<LicenseEntryFormValue>(() =>
     emptyLicenseEntryForm(),
@@ -251,6 +259,10 @@ export function BatchTrackEditPanel({
     if (license !== UNCHANGED && license !== current.shared.license) {
       parts.push(`license status → ${license}`);
     }
+    if (notes.trim() && notes.trim() !== current.shared.notes) {
+      const preview = notes.trim();
+      parts.push(`notes → ${preview.length > 80 ? `${preview.slice(0, 77)}…` : preview}`);
+    }
     return parts;
   }, [
     client,
@@ -261,6 +273,7 @@ export function BatchTrackEditPanel({
     year,
     publicationDate,
     license,
+    notes,
     current.shared,
   ]);
 
@@ -360,6 +373,7 @@ export function BatchTrackEditPanel({
       patch.date = publicationDate.trim();
     }
     if (license !== UNCHANGED && license !== current.shared.license) patch.license = license;
+    if (notes.trim() && notes.trim() !== current.shared.notes) patch.notes = notes.trim();
 
     const patchPayload: Record<string, unknown> = { ...patch };
     if (composerDirty) {
@@ -556,6 +570,26 @@ export function BatchTrackEditPanel({
                   ))}
                 </select>
                 <CurrentValues values={current.licenses} onPick={setLicense} />
+              </div>
+              <div>
+                <span className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-[var(--ink-dim)]">
+                  Notes
+                </span>
+                <textarea
+                  className={`${fieldClass} min-h-[64px] resize-y`}
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder={
+                    current.notes.length > 1
+                      ? "Mixed — type to set all"
+                      : "Techniques, production details — searchable in Browse"
+                  }
+                />
+                <CurrentValues
+                  values={current.notes}
+                  onPick={setNotes}
+                  preview={(value) => (value.length > 80 ? `${value.slice(0, 77)}…` : value)}
+                />
               </div>
 
               <div className="rounded-lg border border-[var(--line)] bg-[rgba(0,0,0,0.12)] p-3">

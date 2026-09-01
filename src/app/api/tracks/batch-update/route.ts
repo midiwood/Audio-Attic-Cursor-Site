@@ -33,6 +33,7 @@ type BatchPatch = {
   license?: string;
   /** First publication date (ISO or display). */
   date?: string;
+  notes?: string;
 };
 
 function parseLicenseEntry(raw: unknown): LicenseEntryInput | { error: string } | null {
@@ -63,7 +64,8 @@ function patchHasValues(patch: BatchPatch | undefined): boolean {
     Boolean(patch.composers?.length) ||
     Boolean(String(patch.year ?? "").trim()) ||
     Boolean(patch.license?.trim()) ||
-    Boolean(patch.date?.trim())
+    Boolean(patch.date?.trim()) ||
+    Boolean(String(patch.notes || "").trim())
   );
 }
 
@@ -88,7 +90,7 @@ function applyPatch(existing: Track, patch: BatchPatch): Track {
     client: patch.client?.trim() ? patch.client.trim() : existing.client,
     project: patch.project?.trim() ? patch.project.trim() : existing.project,
     description: existing.description,
-    notes: existing.notes,
+    notes: patch.notes?.trim() ? patch.notes.trim() : existing.notes,
     year: String(patch.year ?? "").trim()
       ? parseYear(patch.year)
       : existing.year,

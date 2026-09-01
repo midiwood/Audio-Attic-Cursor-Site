@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { PlaylistDetailClient } from "@/components/playlist-detail-client";
+import { PlaylistHeading } from "@/components/playlist-heading";
 import { canManageCatalog, isSubscriber, requireSession } from "@/lib/auth";
 import {
   getPlaylistById,
@@ -14,6 +15,8 @@ import { getLicenseEntryCounts } from "@/lib/license-entries";
 import { getUserLicenseRequestStatusByTrack } from "@/lib/license-requests";
 import { getCatalogMetaSuggestions } from "@/lib/queries";
 import { getCatalogVocabulary } from "@/lib/vocabulary";
+import { listComposersForPicker, ensureHouseComposer } from "@/lib/composers";
+import { getPublisherRuntimeConfig } from "@/lib/site-settings";
 
 export const dynamic = "force-dynamic";
 
@@ -37,11 +40,24 @@ export default async function PlaylistPage({
     tracks = tracks.filter((t) => isSubscriberVisible(t));
   }
   const vocabulary = getCatalogVocabulary();
-  const metaSuggestions = staff && isOwner ? getCatalogMetaSuggestions() : undefined;
-  const housePublisherName = staff && isOwner ? getHousePublisherName() : "";
+  const metaSuggestions = staff ? getCatalogMetaSuggestions() : undefined;
+  const housePublisherName = staff ? getHousePublisherName() : "";
+  let composers: ReturnType<typeof listComposersForPicker> = [];
+  if (staff) {
+    const cfg = getPublisherRuntimeConfig();
+    if (cfg.houseName.trim()) {
+      ensureHouseComposer({
+        displayName: cfg.houseName.trim(),
+        ipiPa: cfg.proPaIpiNameNumber.trim() || cfg.proIpiBaseNumber.trim(),
+        ipiBase: cfg.proIpiBaseNumber.trim() || undefined,
+      });
+    }
+    composers = listComposersForPicker();
+  }
   const trackItems = tracks.map(toTrackListItem);
-  const licenseEntryCounts =
-    staff && isOwner ? getLicenseEntryCounts(trackItems.map((t) => t.id)) : undefined;
+  const licenseEntryCounts = staff
+    ? getLicenseEntryCounts(trackItems.map((t) => t.id))
+    : undefined;
   const userLicenseByTrack =
     subscriber && !staff
       ? getUserLicenseRequestStatusByTrack(
@@ -58,22 +74,22 @@ export default async function PlaylistPage({
       >
         ← Playlists
       </Link>
-      <header className="mb-6 border-b border-[var(--line)] pb-5">
-        <h1 className="text-2xl font-semibold tracking-tight text-[var(--ink)] md:text-3xl">
-          {playlist!.name}
-        </h1>
-        {!isOwner ? (
-          <p className="mt-1 text-sm text-[var(--ink-dim)]">Shared with you</p>
-        ) : null}
-      </header>
+      <PlaylistHeading
+        playlistId={playlist!.id}
+        name={playlist!.name}
+        canRename={isOwner}
+        subtitle={!isOwner ? "Shared with you" : undefined}
+      />
       <PlaylistDetailClient
         playlistId={playlist!.id}
         playlistName={playlist!.name}
         tracks={trackItems}
         canEdit={staff && isOwner}
+        canBatchEdit={staff}
         canModifyPlaylist={isOwner}
         vocabulary={vocabulary}
         metaSuggestions={metaSuggestions}
+        composers={composers}
         housePublisherName={housePublisherName}
         licenseEntryCounts={licenseEntryCounts}
         userLicenseByTrack={userLicenseByTrack}

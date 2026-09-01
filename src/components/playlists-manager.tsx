@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { getLastPlaylist, setLastPlaylist } from "@/lib/last-playlist";
 import { TRASH_HREF } from "@/lib/trash-constants";
 
 type ShareRecipient = {
@@ -34,6 +35,20 @@ type PlaylistSummary = {
   sharedBy?: { id: string; name: string; email: string } | null;
   sharedWith?: ShareRecipient[];
 };
+
+function RenameIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M4 20h4l10.5-10.5a2.12 2.12 0 0 0-3-3L5 17v3ZM14.5 7.5l3 3"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function TrashIcon({ className }: { className?: string }) {
   return (
@@ -327,12 +342,24 @@ function PlaylistRow({
   meta,
   actions,
   elevated = false,
+  renaming = false,
+  renameValue = "",
+  renameBusy = false,
+  onRenameChange,
+  onRenameSubmit,
+  onRenameCancel,
 }: {
   href: string;
   name: string;
   meta: string;
   actions?: ReactNode;
   elevated?: boolean;
+  renaming?: boolean;
+  renameValue?: string;
+  renameBusy?: boolean;
+  onRenameChange?: (value: string) => void;
+  onRenameSubmit?: () => void;
+  onRenameCancel?: () => void;
 }) {
   return (
     <li
@@ -340,12 +367,40 @@ function PlaylistRow({
         elevated ? "z-40" : "z-0"
       }`}
     >
-      <Link href={href} className="absolute inset-0 z-0" aria-label={`Open ${name}`} />
+      {renaming ? null : (
+        <Link href={href} className="absolute inset-0 z-0" aria-label={`Open ${name}`} />
+      )}
       <div className="relative z-10 flex items-center gap-3 px-4 py-3.5 pointer-events-none">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-base font-medium text-[var(--ink)] transition group-hover:text-[var(--accent)]">
-            {name}
-          </div>
+          {renaming ? (
+            <form
+              className="pointer-events-auto"
+              onSubmit={(e) => {
+                e.preventDefault();
+                onRenameSubmit?.();
+              }}
+            >
+              <input
+                value={renameValue}
+                disabled={renameBusy}
+                autoFocus
+                aria-label="Playlist name"
+                onChange={(e) => onRenameChange?.(e.target.value)}
+                onBlur={() => onRenameSubmit?.()}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    onRenameCancel?.();
+                  }
+                }}
+                className="w-full rounded-lg border border-[var(--accent)] bg-[var(--bg)] px-2.5 py-1.5 text-base font-medium text-[var(--ink)] outline-none"
+              />
+            </form>
+          ) : (
+            <div className="truncate text-base font-medium text-[var(--ink)] transition group-hover:text-[var(--accent)]">
+              {name}
+            </div>
+          )}
           <div className="mt-0.5 truncate text-xs text-[var(--ink-dim)]">{meta}</div>
         </div>
         {actions ? (
@@ -377,6 +432,9 @@ export function PlaylistsManager({
   const [shareError, setShareError] = useState("");
   const [shareOk, setShareOk] = useState("");
   const [shareOpenId, setShareOpenId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameBusy, setRenameBusy] = useState(false);
 
   const owned = initialPlaylists.filter((p) => p.isOwner);
   const shared = initialPlaylists.filter((p) => !p.isOwner);
@@ -404,11 +462,42 @@ export function PlaylistsManager({
   async function onDelete(id: string, playlistName: string) {
     if (!confirm(`Delete playlist “${playlistName}”?`)) return;
     setShareOpenId(null);
+    setRenamingId(null);
     await fetch("/api/playlists", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ action: "delete", id }),
     });
+    router.refresh();
+  }
+
+  async function onRename(id: string) {
+    const trimmed = renameValue.trim();
+    const current = owned.find((p) => p.id === id)?.name || "";
+    if (!trimmed) {
+      setError("Name required");
+      return;
+    }
+    if (trimmed === current) {
+      setRenamingId(null);
+      return;
+    }
+    setRenameBusy(true);
+    setError("");
+    const res = await fetch("/api/playlists", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "rename", id, name: trimmed }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setRenameBusy(false);
+    if (!res.ok) {
+      setError(data.error || "Could not rename playlist");
+      return;
+    }
+    const last = getLastPlaylist();
+    if (last?.id === id) setLastPlaylist({ id, name: trimmed });
+    setRenamingId(null);
     router.refresh();
   }
 
@@ -516,8 +605,31 @@ export function PlaylistsManager({
                   name={playlist.name}
                   meta={`${playlist.trackCount} track${playlist.trackCount === 1 ? "" : "s"}`}
                   elevated={shareOpenId === playlist.id}
+                  renaming={renamingId === playlist.id}
+                  renameValue={renameValue}
+                  renameBusy={renameBusy}
+                  onRenameChange={setRenameValue}
+                  onRenameSubmit={() => void onRename(playlist.id)}
+                  onRenameCancel={() => {
+                    setRenamingId(null);
+                    setRenameValue(playlist.name);
+                  }}
                   actions={
                     <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShareOpenId(null);
+                          setRenamingId(playlist.id);
+                          setRenameValue(playlist.name);
+                          setError("");
+                        }}
+                        className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--line)] text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
+                        aria-label={`Rename ${playlist.name}`}
+                        title="Rename"
+                      >
+                        <RenameIcon className="h-4 w-4" />
+                      </button>
                       <ShareMenu
                         playlist={playlist}
                         shareableUsers={shareableUsers}
