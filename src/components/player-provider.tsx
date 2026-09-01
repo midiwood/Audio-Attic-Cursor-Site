@@ -206,19 +206,13 @@ function waveformUrlFor(trackId: string) {
   return `/api/tracks/${encodeURIComponent(trackId)}/waveform`;
 }
 
-/** Warm browser/CDN cache for the next track(s) without blocking playback. */
-export function prefetchTrackAudio(trackId: string) {
-  const url = audioUrlFor(trackId);
+/** ~256 KB ≈ 6–10 s of typical MP3. Range is bytes, not time. */
+const PREFETCH_AUDIO_RANGE_END = 262143;
+/** Let the current play's Dropbox fetch start before warming the next track. */
+const PREFETCH_NEXT_DELAY_MS = 1000;
+
+function prefetchWaveform(trackId: string) {
   try {
-    // Range request: enough to open the stream / fill cache headers quickly.
-    void fetch(url, {
-      method: "GET",
-      headers: { Range: "bytes=0-262143" },
-      credentials: "same-origin",
-      cache: "force-cache",
-      priority: "low",
-    } as RequestInit).catch(() => {});
-    // Peaks JSON is tiny — warm so the waveform can paint without audio decode.
     void fetch(waveformUrlFor(trackId), {
       method: "GET",
       credentials: "same-origin",
@@ -230,9 +224,29 @@ export function prefetchTrackAudio(trackId: string) {
   }
 }
 
+/** Small Range GET through /api/audio — one at a time, never from Browse. */
+function prefetchAudioHead(trackId: string, assetId?: string | null) {
+  try {
+    void fetch(audioUrlFor(trackId, assetId), {
+      method: "GET",
+      headers: { Range: `bytes=0-${PREFETCH_AUDIO_RANGE_END}` },
+      credentials: "same-origin",
+      cache: "force-cache",
+      priority: "low",
+    } as RequestInit).catch(() => {});
+  } catch {
+    // ignore
+  }
+}
+
+/** Warm stored waveform peaks. Browse uses this — no Dropbox audio proxy. */
+export function prefetchTrackAudio(trackId: string) {
+  prefetchWaveform(trackId);
+}
+
 const warmedAudioIds = new Set<string>();
 
-/** Prefetch the first N playable tracks in list order (Browse top-of-list priority). */
+/** Prefetch the first N playable tracks' waveforms (Browse). No /api/audio. */
 export function prefetchTopPlayable(
   tracks: Array<{ id: string; dropboxDl?: string | null }>,
   count = 5,
@@ -251,6 +265,7 @@ export function prefetchTopPlayable(
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const prefetchRef = useRef<Set<string>>(new Set());
+  const nextPrefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
   const queueRef = useRef<PlayerTrack[]>([]);
   const advanceAfterExtendRef = useRef(false);
@@ -312,21 +327,28 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
       audioRef.current = null;
+      if (nextPrefetchTimerRef.current) {
+        clearTimeout(nextPrefetchTimerRef.current);
+        nextPrefetchTimerRef.current = null;
+      }
     };
   }, []);
 
   const prefetchNeighbors = useCallback((track: PlayerTrack, list: PlayerTrack[]) => {
     if (!list.length) return;
     const idx = list.findIndex((t) => t.id === track.id);
-    const candidates = [list[idx + 1], list[idx + 2], list[idx - 1]].filter(
-      Boolean,
-    ) as PlayerTrack[];
-    for (const next of candidates) {
-      if (!isPlayableTrack(next) || next.preview || next.audioSrc) continue;
-      if (prefetchRef.current.has(next.id)) continue;
+    const next = idx >= 0 ? list[idx + 1] : undefined;
+    if (!next || !isPlayableTrack(next) || next.preview || next.audioSrc) return;
+    if (prefetchRef.current.has(next.id)) return;
+
+    if (nextPrefetchTimerRef.current) clearTimeout(nextPrefetchTimerRef.current);
+    nextPrefetchTimerRef.current = setTimeout(() => {
+      nextPrefetchTimerRef.current = null;
+      if (prefetchRef.current.has(next.id)) return;
       prefetchRef.current.add(next.id);
-      prefetchTrackAudio(next.id);
-    }
+      prefetchWaveform(next.id);
+      prefetchAudioHead(next.id, next.assetId);
+    }, PREFETCH_NEXT_DELAY_MS);
   }, []);
 
   const loadAndPlay = useCallback(
@@ -471,6 +493,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   const clearPlayer = useCallback(() => {
     advanceAfterExtendRef.current = false;
+    if (nextPrefetchTimerRef.current) {
+      clearTimeout(nextPrefetchTimerRef.current);
+      nextPrefetchTimerRef.current = null;
+    }
     const audio = audioRef.current;
     if (audio) {
       audio.pause();

@@ -12,7 +12,7 @@ import {
 
 const NAV_STORAGE_KEY = "attic-nav-open";
 const NAV_WIDTH_OPEN = "14rem";
-const NAV_WIDTH_COLLAPSED = "2.75rem"; // 11 = w-11
+const NAV_WIDTH_COLLAPSED = "4rem"; // w-16 — room around 2.5rem icon buttons
 
 type NavItem = {
   href: string;
@@ -335,7 +335,7 @@ export function AppNav({
   }) {
     if (!items.length) return null;
     return (
-      <nav className={`flex flex-col gap-0.5 ${collapsed ? "items-center px-0" : "px-2"}`}>
+      <nav className={`flex flex-col gap-0.5 ${collapsed ? "items-center px-1.5" : "px-2"}`}>
         {items.map((item) => {
           const active = item.match ? item.match(pathname) : pathname === item.href;
           const clickPending = pendingHref === item.href;
@@ -559,7 +559,7 @@ export function AppNav({
         title="Show navigation"
       />
 
-      <div className="relative z-10 flex h-full w-full flex-col items-center py-3 pointer-events-none">
+      <div className="relative z-10 flex h-full w-full flex-col items-center px-1.5 py-3 pointer-events-none">
         <button
           type="button"
           onClick={() => setNavOpenPersist(true)}
