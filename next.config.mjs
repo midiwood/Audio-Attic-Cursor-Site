@@ -1,6 +1,5 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   // Local WAV/MP3 imports can exceed the default ~10MB body buffer used when
   // middleware clones request bodies (truncation → FormData parse failure).
