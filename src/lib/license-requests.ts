@@ -382,6 +382,7 @@ export function deleteLicenseRequest(
 export function listLicenseRequestsForUser(userId: string): Array<
   LicenseRequestListItem & {
     dropboxDl: string | null;
+    dropboxPath: string | null;
     trackDuration: string | null;
   }
 > {
@@ -409,6 +410,7 @@ export function listLicenseRequestsForUser(userId: string): Array<
         u?.email || "",
       ),
       dropboxDl: t?.dropboxDl ?? null,
+      dropboxPath: t?.dropboxPath ?? null,
       trackDuration: t?.duration ?? null,
     };
   });

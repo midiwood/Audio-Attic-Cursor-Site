@@ -35,7 +35,7 @@ export async function GET(
 
   const waveform = getTrackWaveform(id);
   if (!waveform) {
-    return NextResponse.json({ error: "Waveform not found" }, { status: 404 });
+    return new NextResponse(null, { status: 204 });
   }
 
   return NextResponse.json(

@@ -2,7 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from "react";
 import { AddToPlaylistButton } from "@/components/add-to-playlist-button";
-import { SCROLL_TO_CURRENT_EVENT, usePlayer } from "@/components/player-provider";
+import { SCROLL_TO_CURRENT_EVENT, isPlayableTrack, usePlayer } from "@/components/player-provider";
 import { PlayerTime, PlayerWaveform } from "@/components/player-waveform";
 import { authClient } from "@/lib/auth-client";
 import { licenseLabel, normalizeLicenseStatus } from "@/lib/tracks";
@@ -184,7 +184,7 @@ export function BottomPlayer() {
                   </svg>
                 </button>
               ) : null}
-              {!current.preview && current.dropboxDl ? (
+              {!current.preview && isPlayableTrack(current) ? (
                 <a
                   href={`/api/audio?id=${encodeURIComponent(current.id)}&download=1`}
                   className="grid h-9 w-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"

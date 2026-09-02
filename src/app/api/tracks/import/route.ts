@@ -22,11 +22,11 @@ import { isTrackRelationType, type DerivedFromLink } from "@/lib/track-relations
 import { constrainToVocabulary } from "@/lib/vocabulary";
 import { ensureTrackWaveforms } from "@/lib/waveform-generate";
 import {
-  dropboxAuthConfigured,
-  dropboxAuthSetupMessage,
-} from "@/lib/dropbox-auth";
+  spacesConfigured,
+  spacesSetupMessage,
+} from "@/lib/vault-storage";
 import { ingestTrackToVault, finalizeVaultForTrack } from "@/lib/vault-ingest";
-import { isVaultStagingPath } from "@/lib/dropbox-files";
+import { isVaultStagingKey } from "@/lib/vault-storage";
 import {
   formatArtistFromComposers,
   getComposerById,
@@ -133,41 +133,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "At least one track is required" }, { status: 400 });
   }
 
-  if (!dropboxAuthConfigured()) {
-    return NextResponse.json({ error: dropboxAuthSetupMessage() }, { status: 500 });
+  if (!spacesConfigured()) {
+    return NextResponse.json({ error: spacesSetupMessage() }, { status: 500 });
   }
 
   for (let index = 0; index < tracksInput.length; index++) {
     const track = tracksInput[index];
-    const link = track.dropboxLink?.trim() || "";
     const localAudio = audioByIndex.get(index);
-    const vaultReady = Boolean(
-      track.vaultReady && track.dropboxLink && track.dropboxDl && track.dropboxPath,
-    );
-    const localOnly = Boolean(track.localOnly) || (!link && localAudio);
+    const vaultReady = Boolean(track.vaultReady && track.dropboxPath?.trim());
 
     if (vaultReady) continue;
 
-    if (localOnly) {
-      if (!localAudio?.bytes.length) {
-        return NextResponse.json(
-          { error: `Track ${index + 1} is a local upload but no audio file was received` },
-          { status: 400 },
-        );
-      }
-      if (!isAllowedImportAudioUrl(localAudio.filename)) {
-        return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
-      }
-      continue;
-    }
-
-    if (!link) {
+    if (!localAudio?.bytes.length) {
       return NextResponse.json(
-        { error: "Each track needs a Dropbox link or a local audio file" },
+        { error: `Track ${index + 1} needs a prepared vault file or local audio upload` },
         { status: 400 },
       );
     }
-    if (!isAllowedImportAudioUrl(link, track.sourceDropboxPath)) {
+    if (!isAllowedImportAudioUrl(localAudio.filename)) {
       return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
     }
   }
@@ -210,7 +193,7 @@ export async function POST(req: NextRequest) {
   const needsFreshId = (track: (typeof tracksInput)[number]) => {
     const id = String(track.id || "").trim();
     if (!id || id.startsWith("stg_")) return true;
-    if (track.stagingId?.trim() || isVaultStagingPath(track.dropboxPath)) return true;
+    if (track.stagingId?.trim() || isVaultStagingKey(track.dropboxPath)) return true;
     return false;
   };
   const freshCount = tracksInput.filter(needsFreshId).length;
@@ -292,12 +275,7 @@ export async function POST(req: NextRequest) {
           )
         : String(shared.artist || "").trim() || "Richard Vossgatter";
 
-      const vaultReady = Boolean(
-        track.vaultReady &&
-          track.dropboxLink?.trim() &&
-          track.dropboxDl?.trim() &&
-          track.dropboxPath?.trim(),
-      );
+      const vaultReady = Boolean(track.vaultReady && track.dropboxPath?.trim());
 
       const vault = vaultReady
         ? await finalizeVaultForTrack({
@@ -313,10 +291,7 @@ export async function POST(req: NextRequest) {
         : await ingestTrackToVault({
             trackId: ids[index],
             sourceBytes: localAudio?.bytes || null,
-            sourceDropboxPath,
-            sourceUrl: sourceLink || null,
-            sourceHint:
-              localAudio?.filename || sourceDropboxPath || sourceLink || libraryTitle,
+            sourceHint: localAudio?.filename || libraryTitle,
           });
 
       const saved = upsertTrack({
@@ -381,7 +356,11 @@ export async function POST(req: NextRequest) {
 
   // Precompute player waveforms so first play paints instantly (soft-fail).
   const waveforms = await ensureTrackWaveforms(
-    created.map((track) => ({ id: track.id, dropboxDl: track.dropboxDl })),
+    created.map((track) => ({
+      id: track.id,
+      dropboxPath: track.dropboxPath,
+      dropboxDl: track.dropboxDl,
+    })),
     created.length === 1 ? 1 : 2,
   );
 

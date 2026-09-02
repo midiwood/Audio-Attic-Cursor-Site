@@ -78,12 +78,15 @@ export function upsertTrackWaveform(input: {
   };
 }
 
-/** Active catalog tracks that have Dropbox audio but no stored waveform peaks. */
-export function listTracksMissingWaveforms(limit = 25): Array<{ id: string; dropboxDl: string }> {
+/** Active catalog tracks that have vault audio but no stored waveform peaks. */
+export function listTracksMissingWaveforms(
+  limit = 25,
+): Array<{ id: string; dropboxPath: string | null; dropboxDl: string | null }> {
   const capped = Math.max(1, Math.min(limit, 100));
   const rows = db
     .select({
       id: tracks.id,
+      dropboxPath: tracks.dropboxPath,
       dropboxDl: tracks.dropboxDl,
     })
     .from(tracks)
@@ -91,16 +94,22 @@ export function listTracksMissingWaveforms(limit = 25): Array<{ id: string; drop
     .where(
       and(
         isNull(tracks.trashedAt),
-        sql`${tracks.dropboxDl} IS NOT NULL AND ${tracks.dropboxDl} != ''`,
+        sql`(
+          (${tracks.dropboxPath} IS NOT NULL AND trim(${tracks.dropboxPath}) != '' AND ${tracks.dropboxPath} NOT LIKE '/%')
+          OR (${tracks.dropboxDl} IS NOT NULL AND trim(${tracks.dropboxDl}) != '')
+        )`,
         isNull(trackWaveforms.trackId),
       ),
     )
     .limit(capped)
     .all();
 
-  return rows
-    .filter((row): row is { id: string; dropboxDl: string } => Boolean(row.dropboxDl))
-    .map((row) => ({ id: row.id, dropboxDl: row.dropboxDl }));
+  return rows.filter((row) =>
+    Boolean(
+      (row.dropboxPath?.trim() && !row.dropboxPath.trim().startsWith("/")) ||
+        row.dropboxDl?.trim(),
+    ),
+  );
 }
 
 export function countTracksMissingWaveforms(): number {
@@ -111,7 +120,10 @@ export function countTracksMissingWaveforms(): number {
     .where(
       and(
         isNull(tracks.trashedAt),
-        sql`${tracks.dropboxDl} IS NOT NULL AND ${tracks.dropboxDl} != ''`,
+        sql`(
+          (${tracks.dropboxPath} IS NOT NULL AND trim(${tracks.dropboxPath}) != '' AND ${tracks.dropboxPath} NOT LIKE '/%')
+          OR (${tracks.dropboxDl} IS NOT NULL AND trim(${tracks.dropboxDl}) != '')
+        )`,
         isNull(trackWaveforms.trackId),
       ),
     )

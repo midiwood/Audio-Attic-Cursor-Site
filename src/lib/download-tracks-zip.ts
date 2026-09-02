@@ -1,44 +1,71 @@
 "use client";
 
-/** Trigger a zip download from POST /api/audio/zip. */
-export async function downloadTracksZip(body: {
-  trackIds?: string[];
-  playlistId?: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
-  const res = await fetch("/api/audio/zip", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
+import { MAX_ZIP_TRACKS } from "@/lib/audio-download-shared";
 
-  if (!res.ok) {
-    const text = await res.text();
-    let message = `Download failed (${res.status})`;
-    try {
-      const data = JSON.parse(text) as { error?: string };
-      if (data.error) message = data.error;
-    } catch {
-      // HTML / empty body from proxy or Next error page
-    }
-    return { ok: false, error: message };
-  }
-
-  const blob = await res.blob();
-  if (!blob.size) {
-    return { ok: false, error: "Download returned an empty file" };
-  }
-
-  const disposition = res.headers.get("content-disposition") || "";
-  const match = /filename="([^"]+)"/i.exec(disposition);
-  const filename = match?.[1] || "audio-attic-tracks.zip";
-
-  const url = URL.createObjectURL(blob);
+function triggerDownload(url: string, filename: string) {
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
+  a.rel = "noopener";
   document.body.appendChild(a);
   a.click();
   a.remove();
-  URL.revokeObjectURL(url);
-  return { ok: true };
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Fetch presigned URLs and download each track directly from Spaces. */
+export async function downloadTracksZip(body: {
+  trackIds?: string[];
+  playlistId?: string;
+}): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  let trackIds = body.trackIds ?? [];
+
+  if (body.playlistId && !trackIds.length) {
+    const res = await fetch(`/api/playlists/${encodeURIComponent(body.playlistId)}/tracks`);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      return { ok: false, error: data.error || "Could not load playlist tracks" };
+    }
+    trackIds = Array.isArray(data.trackIds) ? data.trackIds : [];
+  }
+
+  const ids = [...new Set(trackIds.filter(Boolean))];
+  if (!ids.length) {
+    return { ok: false, error: "No tracks selected" };
+  }
+  if (ids.length > MAX_ZIP_TRACKS) {
+    return { ok: false, error: `Download at most ${MAX_ZIP_TRACKS} tracks at a time` };
+  }
+
+  const res = await fetch("/api/audio/presign-batch", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trackIds: ids }),
+  });
+
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    return { ok: false, error: data.error || `Download failed (${res.status})` };
+  }
+
+  const downloads = Array.isArray(data.downloads)
+    ? (data.downloads as Array<{ url: string; filename: string }>)
+    : [];
+
+  if (!downloads.length) {
+    return { ok: false, error: "No downloadable tracks found" };
+  }
+
+  for (let i = 0; i < downloads.length; i++) {
+    const item = downloads[i];
+    triggerDownload(item.url, item.filename);
+    if (i < downloads.length - 1) {
+      await sleep(400);
+    }
+  }
+
+  return { ok: true, count: downloads.length };
 }

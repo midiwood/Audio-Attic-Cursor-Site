@@ -20,6 +20,7 @@ import {
   audioFileTypeFromUrls,
   canonicalizeLicense,
   formatDisplayTitle,
+  hasPlayableAudio,
   normalizeLicenseStatus,
   splitTags,
 } from "@/lib/tracks";
@@ -73,6 +74,7 @@ function neighborPlayerTrack(rel: TrackRelationView): PlayerTrack {
     subtitle: n.year ? String(n.year) : null,
     duration: n.duration,
     dropboxDl: n.dropboxDl,
+    dropboxPath: n.dropboxPath,
     license: n.license,
   };
 }
@@ -197,27 +199,17 @@ function LineageNeighborDetail({ trackId }: { trackId: string }) {
           ))}
         </dl>
       </div>
-      {item.dropboxLink ? (
+      {item.sourceFolderLink ? (
         <div className="mt-3 flex flex-wrap gap-3">
           <a
-            href={item.dropboxLink}
+            href={item.sourceFolderLink}
             target="_blank"
             rel="noreferrer"
             className="text-[11px] text-[var(--ink-dim)] transition hover:text-[var(--accent)]"
+            title={item.sourceDropboxPath || undefined}
           >
-            Open in Dropbox →
+            Original folder →
           </a>
-          {item.sourceFolderLink ? (
-            <a
-              href={item.sourceFolderLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] text-[var(--ink-dim)] transition hover:text-[var(--accent)]"
-              title={item.sourceDropboxPath || undefined}
-            >
-              Original folder →
-            </a>
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -326,7 +318,7 @@ function InlineTrackView({
   const { playTrack, current, isPlaying } = usePlayer();
   const [openLineageId, setOpenLineageId] = useState<string | null>(null);
   const lineageQueue = useMemo(
-    () => lineage.filter((rel) => rel.neighbor.dropboxDl).map(neighborPlayerTrack),
+    () => lineage.filter((rel) => hasPlayableAudio(rel.neighbor)).map(neighborPlayerTrack),
     [lineage],
   );
 
@@ -381,16 +373,6 @@ function InlineTrackView({
               <span className="text-[11px] tabular-nums text-[var(--ink-dim)]">
                 {licenseEntryCount} license{licenseEntryCount === 1 ? "" : "s"}
               </span>
-            ) : null}
-            {track.dropboxLink ? (
-              <a
-                href={track.dropboxLink}
-                target="_blank"
-                rel="noreferrer"
-                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
-              >
-                Open in Dropbox
-              </a>
             ) : null}
             {track.sourceFolderLink ? (
               <a
@@ -468,7 +450,7 @@ function InlineTrackView({
           <ul className="mt-2 space-y-2">
             {lineage.map((rel) => {
               const title = formatDisplayTitle(rel.neighbor);
-              const canPlay = Boolean(rel.neighbor.dropboxDl);
+              const canPlay = hasPlayableAudio(rel.neighbor);
               const active = current?.id === rel.neighbor.id;
               const detailOpen = openLineageId === rel.id;
               return (

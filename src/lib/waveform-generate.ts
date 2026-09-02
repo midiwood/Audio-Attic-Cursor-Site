@@ -1,8 +1,12 @@
+import "server-only";
+
 import { spawn } from "child_process";
 import { mkdtemp, writeFile, rm } from "fs/promises";
 import os from "os";
 import path from "path";
 import { durationSecondsFromSamples } from "@/lib/audio-duration";
+import { isSpacesObjectKey } from "@/lib/storage/paths";
+import { getObjectBuffer } from "@/lib/storage/spaces";
 import {
   WAVEFORM_PEAKS_MAX_LENGTH,
   WAVEFORM_PEAKS_PRECISION,
@@ -140,20 +144,27 @@ export async function generateWaveformPeaksFromBytes(
 }
 
 export async function fetchAudioForPeaks(
-  url: string,
+  objectKeyOrUrl: string,
 ): Promise<{ bytes: Buffer; mimeType: string } | null> {
   try {
-    const res = await fetch(url, { redirect: "follow" });
-    if (!res.ok) return null;
-    const arrayBuffer = await res.arrayBuffer();
-    if (arrayBuffer.byteLength === 0) return null;
-    if (arrayBuffer.byteLength > MAX_AUDIO_BYTES) {
-      // Truncated mid-file breaks decode — skip rather than invent a bad wave.
-      return null;
+    let bytes: Buffer;
+    let mimeType = "audio/mpeg";
+
+    if (isSpacesObjectKey(objectKeyOrUrl)) {
+      bytes = await getObjectBuffer(objectKeyOrUrl);
+      mimeType = objectKeyOrUrl.toLowerCase().endsWith(".wav") ? "audio/wav" : "audio/mpeg";
+    } else {
+      const res = await fetch(objectKeyOrUrl, { redirect: "follow" });
+      if (!res.ok) return null;
+      const arrayBuffer = await res.arrayBuffer();
+      if (arrayBuffer.byteLength === 0) return null;
+      if (arrayBuffer.byteLength > MAX_AUDIO_BYTES) return null;
+      bytes = Buffer.from(arrayBuffer);
+      mimeType =
+        res.headers.get("content-type")?.split(";")[0]?.trim() || "audio/mpeg";
     }
-    const bytes = Buffer.from(arrayBuffer);
-    const mimeType =
-      res.headers.get("content-type")?.split(";")[0]?.trim() || "audio/mpeg";
+
+    if (bytes.length > MAX_AUDIO_BYTES) return null;
     return { bytes, mimeType };
   } catch {
     return null;
@@ -166,19 +177,22 @@ export async function fetchAudioForPeaks(
  */
 export async function ensureTrackWaveform(
   trackId: string,
-  dropboxDl: string | null | undefined,
+  source: { dropboxPath?: string | null; dropboxDl?: string | null },
   opts?: { force?: boolean },
 ): Promise<boolean> {
-  if (!dropboxDl?.trim()) return false;
+  const key = source.dropboxPath?.trim() || "";
+  const legacy = source.dropboxDl?.trim() || "";
+  const fetchTarget = key && isSpacesObjectKey(key) ? key : legacy;
+  if (!fetchTarget) return false;
   if (!opts?.force && getTrackWaveform(trackId)) return true;
 
   try {
-    const audio = await fetchAudioForPeaks(dropboxDl.trim());
+    const audio = await fetchAudioForPeaks(fetchTarget);
     if (!audio) return false;
     const generated = await generateWaveformPeaksFromBytes(
       audio.bytes,
       audio.mimeType,
-      dropboxDl,
+      fetchTarget,
     );
     if (!generated) return false;
     upsertTrackWaveform({
@@ -196,7 +210,7 @@ export async function ensureTrackWaveform(
 
 /** Run peak generation for several tracks with limited concurrency. */
 export async function ensureTrackWaveforms(
-  items: Array<{ id: string; dropboxDl: string | null | undefined }>,
+  items: Array<{ id: string; dropboxPath?: string | null; dropboxDl?: string | null }>,
   concurrency = 2,
 ): Promise<{ ok: number; failed: number }> {
   let ok = 0;
@@ -206,7 +220,7 @@ export async function ensureTrackWaveforms(
   async function worker() {
     while (index < items.length) {
       const current = items[index++];
-      const success = await ensureTrackWaveform(current.id, current.dropboxDl);
+      const success = await ensureTrackWaveform(current.id, current);
       if (success) ok += 1;
       else failed += 1;
     }

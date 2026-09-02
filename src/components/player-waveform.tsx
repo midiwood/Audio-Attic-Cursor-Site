@@ -8,7 +8,8 @@
  * causing play → waveform mount → audio killed → second click needed.
  *
  * When peaks exist in the DB, render instantly (no audio decode).
- * First play still decodes once, then POSTs peaks for next time.
+ * Without peaks, show the seek bar only — catalog audio lives on Spaces and
+ * cannot be fetched from JS (CORS); use Admin → waveforms backfill instead.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -194,7 +195,7 @@ export function PlayerWaveform({ height = 36 }: { height?: number }) {
         if (cancelled) return;
 
         if (stored) {
-          // Peaks-only: no silent media, no Dropbox fetch for the waveform.
+          // Peaks-only: no silent media, no remote audio fetch for the waveform.
           const ws = WaveSurfer.create({
             ...baseOptions,
             peaks: stored.peaks,
@@ -211,9 +212,18 @@ export function PlayerWaveform({ height = 36 }: { height?: number }) {
           cleanupWs = bindCommon(ws, false);
           return;
         }
+
+        // No stored peaks — avoid fetch to /api/audio (302 → Spaces, blocked by CORS).
+        setFailed(true);
+        return;
       }
 
-      const url = audioSrc || `/api/audio?id=${encodeURIComponent(trackId)}`;
+      if (!audioSrc) {
+        setFailed(true);
+        return;
+      }
+
+      const url = audioSrc;
       const ws = WaveSurfer.create({
         ...baseOptions,
         url,

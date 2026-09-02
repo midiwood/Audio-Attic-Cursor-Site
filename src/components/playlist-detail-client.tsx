@@ -11,6 +11,7 @@ import type { TrackRelationView } from "@/lib/track-relations";
 import type { CatalogMetaSuggestions } from "@/lib/queries";
 import type { UserTrackLicenseStatus } from "@/lib/license-requests";
 import type { CatalogVocabulary } from "@/lib/vocabulary";
+import { formatDisplayTitle, hasPlayableAudio } from "@/lib/tracks";
 import { downloadTracksZip } from "@/lib/download-tracks-zip";
 
 export function PlaylistDetailClient({
@@ -66,7 +67,7 @@ export function PlaylistDetailClient({
   }, [initialTracks]);
 
   const queue: PlayerTrack[] = tracks
-    .filter((t) => t.dropboxDl)
+    .filter((t) => hasPlayableAudio(t))
     .map((t) => ({
       id: t.id,
       title: t.libraryTitle || t.workingTitle || t.id,
@@ -75,6 +76,7 @@ export function PlaylistDetailClient({
         : [t.client, t.year].filter(Boolean).join(" · ") || null,
       duration: t.duration,
       dropboxDl: t.dropboxDl,
+      dropboxPath: t.dropboxPath,
       license: t.license,
     }));
 
@@ -92,7 +94,9 @@ export function PlaylistDetailClient({
     if (!queue.length || downloadBusy) return;
     setDownloadBusy(true);
     setDownloadError("");
-    const result = await downloadTracksZip({ playlistId });
+    const result = await downloadTracksZip({
+      trackIds: tracks.filter((t) => hasPlayableAudio(t)).map((t) => t.id),
+    });
     setDownloadBusy(false);
     if (!result.ok) setDownloadError(result.error);
   }

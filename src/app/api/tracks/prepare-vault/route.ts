@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCatalogStaffSession } from "@/lib/auth";
-import {
-  dropboxAuthConfigured,
-  dropboxAuthSetupMessage,
-} from "@/lib/dropbox-auth";
 import { isAllowedImportAudioUrl, mp3OnlyErrorMessage } from "@/lib/tracks";
+import { spacesConfigured, spacesSetupMessage } from "@/lib/vault-storage";
 import { stageTrackToVault } from "@/lib/vault-ingest";
 
 export const runtime = "nodejs";
@@ -23,24 +20,19 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!dropboxAuthConfigured()) {
-    return NextResponse.json({ error: dropboxAuthSetupMessage() }, { status: 500 });
+  if (!spacesConfigured()) {
+    return NextResponse.json({ error: spacesSetupMessage() }, { status: 500 });
   }
 
   const contentType = req.headers.get("content-type") || "";
   let sourceBytes: Buffer | null = null;
   let filename = "";
-  let dropboxLink = "";
-  let sourceDropboxPath = "";
   let preferredStagingId = "";
 
   try {
     if (contentType.includes("multipart/form-data")) {
       const form = await req.formData();
-      dropboxLink = String(form.get("dropboxLink") || "").trim();
-      sourceDropboxPath = String(form.get("sourceDropboxPath") || "").trim();
       preferredStagingId = String(form.get("stagingId") || form.get("trackId") || "").trim();
-      // Ignore legacy catalog ids sent as trackId — only reuse staging ids.
       if (preferredStagingId && !preferredStagingId.startsWith("stg_")) {
         preferredStagingId = "";
       }
@@ -50,36 +42,21 @@ export async function POST(req: NextRequest) {
         filename = audio.name || "audio.mp3";
       }
     } else {
-      const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
-      dropboxLink = String(body?.dropboxLink || "").trim();
-      sourceDropboxPath = String(body?.sourceDropboxPath || "").trim();
-      preferredStagingId = String(body?.stagingId || "").trim();
-      if (preferredStagingId && !preferredStagingId.startsWith("stg_")) {
-        preferredStagingId = "";
-      }
+      return NextResponse.json({ error: "Expected multipart form data with audio file" }, { status: 400 });
     }
 
-    if (!sourceBytes?.length && !dropboxLink && !sourceDropboxPath) {
-      return NextResponse.json(
-        { error: "Provide a local audio file or a Dropbox link/path" },
-        { status: 400 },
-      );
+    if (!sourceBytes?.length) {
+      return NextResponse.json({ error: "Provide a local audio file" }, { status: 400 });
     }
 
-    if (sourceBytes?.length) {
-      if (!isAllowedImportAudioUrl(filename || "track.mp3")) {
-        return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
-      }
-    } else if (!isAllowedImportAudioUrl(dropboxLink, sourceDropboxPath)) {
+    if (!isAllowedImportAudioUrl(filename || "track.mp3")) {
       return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
     }
 
     const vault = await stageTrackToVault({
       stagingId: preferredStagingId || null,
       sourceBytes,
-      sourceDropboxPath: sourceDropboxPath || null,
-      sourceUrl: dropboxLink || null,
-      sourceHint: filename || sourceDropboxPath || dropboxLink || "audio.mp3",
+      sourceHint: filename || "audio.mp3",
     });
 
     return NextResponse.json({

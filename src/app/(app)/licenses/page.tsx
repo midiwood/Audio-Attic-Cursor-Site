@@ -32,6 +32,7 @@ export default async function LicensesPage() {
     status: row.status,
     createdAt: row.createdAt,
     dropboxDl: row.dropboxDl,
+    dropboxPath: row.dropboxPath,
     trackDuration: row.trackDuration,
   }));
 

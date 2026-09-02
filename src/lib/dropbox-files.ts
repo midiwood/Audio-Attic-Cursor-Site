@@ -1,7 +1,6 @@
 /**
- * Dropbox file download / upload / share helpers for the catalog vault.
- * Final layout:  {uploadFolder}/{trackId}/track.mp3
- * Staging layout:{uploadFolder}/_tmp/{stagingId}/track.mp3  (before import confirm)
+ * Legacy Dropbox helpers — used only by migration scripts (`spaces:migrate-from-dropbox`).
+ * New uploads go through `@/lib/vault-storage` → DigitalOcean Spaces.
  */
 
 import {

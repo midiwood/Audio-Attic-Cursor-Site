@@ -13,7 +13,7 @@ import {
   usePlayer,
   type PlayerTrack,
 } from "@/components/player-provider";
-import { formatDisplayTitle } from "@/lib/tracks";
+import { formatDisplayTitle, hasPlayableAudio } from "@/lib/tracks";
 import type { TrackRelationView } from "@/lib/track-relations";
 import { type TrackListItem } from "@/lib/track-list-item";
 import type { CatalogMetaSuggestions } from "@/lib/queries";
@@ -137,6 +137,7 @@ function toPlayerTrack(track: TrackListItem, subscriberView = false): PlayerTrac
       : [track.client, track.project, track.year].filter(Boolean).join(" · ") || null,
     duration: track.duration,
     dropboxDl: track.dropboxDl,
+    dropboxPath: track.dropboxPath,
     license: track.license,
   };
 }
@@ -307,7 +308,7 @@ export function TrackList({
   }, [initialUserLicenseByTrack]);
 
   const queue = useMemo(
-    () => tracks.filter((t) => t.dropboxDl).map((t) => toPlayerTrack(t, subscriberView)),
+    () => tracks.filter((t) => hasPlayableAudio(t)).map((t) => toPlayerTrack(t, subscriberView)),
     [tracks, subscriberView],
   );
   const firstTrackId = tracks[0]?.id;
@@ -494,7 +495,7 @@ export function TrackList({
         {tracks.map((track) => {
           const title = formatDisplayTitle(track);
           const active = current?.id === track.id;
-          const canPlay = Boolean(track.dropboxDl);
+          const canPlay = hasPlayableAudio(track);
           const expanded = expandedId === track.id;
           const lineage = subscriberView ? [] : relationsByTrack?.[track.id] || [];
           const subtitle = subscriberView

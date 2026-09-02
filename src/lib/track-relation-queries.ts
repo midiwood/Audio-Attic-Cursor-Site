@@ -19,6 +19,7 @@ function toNeighbor(track: Track): TrackRelationNeighbor {
     year: track.year,
     duration: track.duration,
     dropboxDl: track.dropboxDl,
+    dropboxPath: track.dropboxPath,
   };
 }
 

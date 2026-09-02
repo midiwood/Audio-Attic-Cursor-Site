@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { LicenseBadge } from "@/components/license-badge";
 import { usePlayer, type PlayerTrack } from "@/components/player-provider";
-import { formatDisplayTitle } from "@/lib/tracks";
+import { formatDisplayTitle, hasPlayableAudio } from "@/lib/tracks";
 import type { TrackListItem } from "@/lib/track-list-item";
 
 function toPlayerTrack(track: TrackListItem): PlayerTrack {
@@ -15,6 +15,7 @@ function toPlayerTrack(track: TrackListItem): PlayerTrack {
     subtitle: [track.client, track.year].filter(Boolean).join(" · ") || null,
     duration: track.duration,
     dropboxDl: track.dropboxDl,
+    dropboxPath: track.dropboxPath,
     license: track.license,
   };
 }
@@ -38,7 +39,7 @@ export function TrashPlaylistClient({
   }, [initialTracks]);
 
   const queue = useMemo(
-    () => tracks.filter((t) => t.dropboxDl).map(toPlayerTrack),
+    () => tracks.filter((t) => hasPlayableAudio(t)).map(toPlayerTrack),
     [tracks],
   );
 
@@ -181,7 +182,7 @@ export function TrashPlaylistClient({
             {tracks.map((track) => {
               const title = formatDisplayTitle(track);
               const active = current?.id === track.id;
-              const canPlay = Boolean(track.dropboxDl);
+              const canPlay = hasPlayableAudio(track);
               const checked = selected.has(track.id);
               return (
                 <li

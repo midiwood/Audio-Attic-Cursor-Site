@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { usePlayer, type PlayerTrack } from "@/components/player-provider";
 import { TrackList, type TrackListItem } from "@/components/track-list";
+import { hasPlayableAudio } from "@/lib/tracks";
 
 export function GuestPlaylistClient({
   playlistName,
@@ -15,13 +16,14 @@ export function GuestPlaylistClient({
   const queue: PlayerTrack[] = useMemo(
     () =>
       tracks
-        .filter((t) => t.dropboxDl)
+        .filter((t) => hasPlayableAudio(t))
         .map((t) => ({
           id: t.id,
           title: t.libraryTitle || t.workingTitle || t.id,
           subtitle: [t.duration, t.musicalKey].filter(Boolean).join(" · ") || null,
           duration: t.duration,
           dropboxDl: t.dropboxDl,
+          dropboxPath: t.dropboxPath,
           license: t.license,
         })),
     [tracks],

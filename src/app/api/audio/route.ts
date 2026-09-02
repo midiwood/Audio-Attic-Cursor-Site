@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession, isSubscriber } from "@/lib/auth";
+import { resolveAudioRedirectUrl } from "@/lib/audio-access";
 import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { getTrackById } from "@/lib/queries";
 import { formatAudioDownloadLabel } from "@/lib/tracks";
@@ -7,10 +8,6 @@ import { isSubscriberVisible } from "@/lib/publisher";
 import { getTrackAssetForTrack } from "@/lib/track-assets";
 
 export const runtime = "nodejs";
-
-function safeFilename(name: string) {
-  return name.replace(/[^\w.\- ()[\]]+/g, "_").slice(0, 120) || "track";
-}
 
 export async function GET(req: NextRequest) {
   const session = await getApiSession();
@@ -32,77 +29,37 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Track or audio not found" }, { status: 404 });
   }
   if (session && isSubscriber(session) && !isSubscriberVisible(track)) {
-    return NextResponse.json({ error: "Track not found" }, { status: 404 });
+    return NextResponse.json({ error: "Track or audio not found" }, { status: 404 });
   }
 
-  let dropboxDl = track.dropboxDl;
+  let objectKey = track.dropboxPath;
+  let legacyDlUrl = track.dropboxDl;
   let downloadLabel = formatAudioDownloadLabel(track);
 
   if (assetId) {
     const asset = getTrackAssetForTrack(id, assetId);
-    if (!asset?.dropboxDl) {
+    if (!asset) {
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });
     }
-    dropboxDl = asset.dropboxDl;
+    objectKey = asset.dropboxPath;
+    legacyDlUrl = asset.dropboxDl;
     downloadLabel = formatAudioDownloadLabel(
       track,
       asset.label,
       asset.kind === "stem" || asset.kind === "version" ? asset.kind : null,
     );
-  } else if (!dropboxDl) {
+  }
+
+  const redirectUrl = await resolveAudioRedirectUrl({
+    objectKey,
+    legacyDlUrl,
+    download,
+    downloadLabel,
+  });
+
+  if (!redirectUrl) {
     return NextResponse.json({ error: "Track or audio not found" }, { status: 404 });
   }
 
-  const range = download ? undefined : (req.headers.get("range") ?? undefined);
-  const upstream = await fetch(dropboxDl, {
-    headers: range ? { Range: range } : undefined,
-    redirect: "follow",
-  });
-
-  if (!upstream.ok && upstream.status !== 206) {
-    return NextResponse.json(
-      { error: `Upstream audio failed: ${upstream.status}` },
-      { status: 502 },
-    );
-  }
-
-  const headers = new Headers();
-  const passThrough = [
-    "content-type",
-    "content-length",
-    "content-range",
-    "accept-ranges",
-    "etag",
-    "last-modified",
-  ];
-  for (const key of passThrough) {
-    const value = upstream.headers.get(key);
-    if (value) headers.set(key, value);
-  }
-  if (!headers.has("content-type")) {
-    headers.set("content-type", "audio/mpeg");
-  }
-  if (!headers.has("accept-ranges")) {
-    headers.set("accept-ranges", "bytes");
-  }
-  headers.set(
-    "cache-control",
-    download
-      ? "private, no-store"
-      : "public, max-age=86400, stale-while-revalidate=604800",
-  );
-  if (!download) {
-    headers.set("vary", "Range");
-  }
-
-  if (download) {
-    const title = safeFilename(downloadLabel);
-    const ext = dropboxDl.toLowerCase().includes(".wav") ? "wav" : "mp3";
-    headers.set("content-disposition", `attachment; filename="${title}.${ext}"`);
-  }
-
-  return new NextResponse(upstream.body, {
-    status: upstream.status,
-    headers,
-  });
+  return NextResponse.redirect(redirectUrl, 302);
 }

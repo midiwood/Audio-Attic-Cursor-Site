@@ -26,6 +26,7 @@ import {
   readDurationFromAudioUrl,
 } from "@/lib/audio-duration";
 import {
+  hasPlayableAudio,
   mp3OnlyErrorMessage,
   normalizeLicenseStatus,
 } from "@/lib/tracks";
@@ -53,9 +54,8 @@ type DraftTrack = ImportDraftTrack;
 type PipelinePhase = ImportPipelineStepId | "idle";
 
 function previewUrlFor(track: DraftTrack) {
-  // Prefer the normalized vault master once it exists.
-  if (track.vaultReady && track.dropboxLink) {
-    return `/api/audio/preview?url=${encodeURIComponent(track.dropboxLink)}`;
+  if (track.vaultReady && track.trackId) {
+    return `/api/audio?id=${encodeURIComponent(track.trackId)}`;
   }
   if (track.localPreviewUrl) return track.localPreviewUrl;
   if (track.dropboxLink) return `/api/audio/preview?url=${encodeURIComponent(track.dropboxLink)}`;
@@ -100,7 +100,7 @@ function hasHardDuplicate(warnings: DuplicateMatch[][]) {
 }
 
 function catalogMatchToPlayerTrack(track: TrackListItem): PlayerTrack | null {
-  if (!track.dropboxDl) return null;
+  if (!hasPlayableAudio(track)) return null;
   return {
     id: track.id,
     title: track.libraryTitle?.trim() || track.workingTitle?.trim() || track.id,
@@ -108,6 +108,7 @@ function catalogMatchToPlayerTrack(track: TrackListItem): PlayerTrack | null {
       [track.workingTitle, track.client, track.year].filter(Boolean).join(" · ") || null,
     duration: track.duration,
     dropboxDl: track.dropboxDl,
+    dropboxPath: track.dropboxPath,
     license: track.license,
   };
 }
@@ -1644,7 +1645,7 @@ export function ImportForm({
                           <ul className="mt-2 space-y-2">
                             {soft.slice(0, 4).map((match) => {
                               const catalog = dupCatalogTracks.find((t) => t.id === match.id);
-                              const canPlay = Boolean(catalog?.dropboxDl);
+                              const canPlay = catalog ? hasPlayableAudio(catalog) : false;
                               const active = current?.id === match.id && !current?.preview;
                               const rowPlaying = active && isPlaying;
                               const library = match.libraryTitle?.trim() || "";

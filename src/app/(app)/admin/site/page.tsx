@@ -3,9 +3,9 @@ import { requireSiteAdmin } from "@/lib/auth";
 import { countPendingApprovals } from "@/lib/pending-approval-count";
 import {
   getAiRuntimeConfig,
-  getDropboxRuntimeConfig,
   getMailRuntimeConfig,
   getPublisherRuntimeConfig,
+  getSpacesRuntimeConfig,
   settingSource,
   SETTINGS,
 } from "@/lib/site-settings";
@@ -23,14 +23,12 @@ export default async function AdminSitePage() {
   await requireSiteAdmin("/admin/site");
 
   const ai = getAiRuntimeConfig();
-  const dropbox = getDropboxRuntimeConfig();
+  const spaces = getSpacesRuntimeConfig();
   const mail = getMailRuntimeConfig();
   const publisher = getPublisherRuntimeConfig();
   const pendingUsers = countPendingApprovals();
   const aiReady = Boolean(ai.geminiApiKey);
-  const dropboxReady = Boolean(
-    (dropbox.appKey && dropbox.appSecret && dropbox.refreshToken) || dropbox.accessToken,
-  );
+  const spacesReady = Boolean(spaces.key && spaces.secret && spaces.bucket && spaces.region);
   const mailReady = Boolean(mail.apiKey);
   const publisherReady = Boolean(publisher.houseName);
 
@@ -79,16 +77,14 @@ export default async function AdminSitePage() {
       badge: 0,
     },
     {
-      href: "/admin/settings/dropbox",
-      title: "Dropbox",
-      description: "App credentials and tokens for catalog audio access.",
+      href: "/admin/settings/storage",
+      title: "Storage",
+      description: "DigitalOcean Spaces credentials for the audio vault.",
       meta: statusLabel(
-        dropboxReady,
-        settingSource(SETTINGS.DROPBOX_REFRESH_TOKEN) !== "none"
-          ? settingSource(SETTINGS.DROPBOX_REFRESH_TOKEN)
-          : settingSource(SETTINGS.DROPBOX_ACCESS_TOKEN) !== "none"
-            ? settingSource(SETTINGS.DROPBOX_ACCESS_TOKEN)
-            : settingSource(SETTINGS.DROPBOX_APP_KEY),
+        spacesReady,
+        settingSource(SETTINGS.SPACES_KEY) !== "none"
+          ? settingSource(SETTINGS.SPACES_KEY)
+          : settingSource(SETTINGS.SPACES_BUCKET),
       ),
       badge: 0,
     },
@@ -108,7 +104,7 @@ export default async function AdminSitePage() {
           Admin
         </h1>
         <p className="mt-1 text-sm text-[var(--ink-dim)]">
-          Site administration — users, licensing, AI, Dropbox, and email.
+          Site administration — users, licensing, AI, storage, and email.
         </p>
       </header>
 

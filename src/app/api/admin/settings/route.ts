@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isSiteAdmin, getSession } from "@/lib/auth";
 import { clearDropboxAccessTokenCache } from "@/lib/dropbox-auth";
+import { clearSpacesClientCache } from "@/lib/storage/spaces";
 import { ensureHouseComposer } from "@/lib/composers";
 import {
   SETTINGS,
@@ -74,6 +75,13 @@ export async function POST(req: NextRequest) {
     Object.keys(values).some((k) => k.startsWith("dropbox."))
   ) {
     clearDropboxAccessTokenCache();
+  }
+
+  if (
+    clear.some((k) => k.startsWith("spaces.")) ||
+    Object.keys(values).some((k) => k.startsWith("spaces."))
+  ) {
+    clearSpacesClientCache();
   }
 
   return NextResponse.json({ ok: true });

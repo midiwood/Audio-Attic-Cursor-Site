@@ -16,6 +16,7 @@ export type TrackRelationNeighbor = {
   year: number | null;
   duration: string | null;
   dropboxDl: string | null;
+  dropboxPath: string | null;
 };
 
 /** Relation as seen from a focal track. */

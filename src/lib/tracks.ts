@@ -274,3 +274,13 @@ export function formatAudioDownloadLabel(
   }
   return parts.join("_");
 }
+
+/** True when track or asset has vault audio (Spaces key or legacy Dropbox URL). */
+export function hasPlayableAudio(row: {
+  dropboxPath?: string | null;
+  dropboxDl?: string | null;
+}): boolean {
+  const key = row.dropboxPath?.trim() || "";
+  if (key && !key.startsWith("/")) return true;
+  return Boolean(row.dropboxDl?.trim());
+}
