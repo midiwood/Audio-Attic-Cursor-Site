@@ -16,7 +16,7 @@ export function BrowseSelectionBar({
   if (!selectedCount) return null;
 
   return (
-    <div className="sticky bottom-[calc(var(--bottom-player-height,0px)+0.75rem)] z-30 mx-auto mb-3 max-w-3xl rounded-xl border border-[var(--line)] bg-[rgba(8,14,22,0.96)] px-4 py-3 shadow-xl backdrop-blur-xl">
+    <div className="sticky bottom-[calc(var(--mobile-chrome-bottom,var(--bottom-player-height,0px))+0.75rem)] z-30 mx-auto mb-3 max-w-3xl rounded-xl border border-[var(--line)] bg-[rgba(8,14,22,0.96)] px-4 py-3 shadow-xl backdrop-blur-xl lg:bottom-[calc(var(--bottom-player-height,0px)+0.75rem)]">
       <div className="flex flex-wrap items-center gap-3">
         <div className="min-w-0 flex-1 text-sm text-[var(--ink)]">
           <span className="font-medium">{selectedCount} selected</span>

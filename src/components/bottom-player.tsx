@@ -1,9 +1,10 @@
 "use client";
 
 import { useLayoutEffect, useRef, useState } from "react";
+import { PlayerOverflowMenu } from "@/components/player-overflow-menu";
 import { AddToPlaylistButton } from "@/components/add-to-playlist-button";
-import { SCROLL_TO_CURRENT_EVENT, isPlayableTrack, usePlayer } from "@/components/player-provider";
-import { PlayerTime, PlayerWaveform } from "@/components/player-waveform";
+import { isPlayableTrack, SCROLL_TO_CURRENT_EVENT, usePlayer } from "@/components/player-provider";
+import { PlayerProgressBar, PlayerTime, PlayerWaveform } from "@/components/player-waveform";
 import { authClient } from "@/lib/auth-client";
 import { licenseLabel, normalizeLicenseStatus } from "@/lib/tracks";
 
@@ -21,6 +22,68 @@ function isStaffRole(role: unknown): boolean {
     return parts.includes("admin") || parts.includes("editor");
   }
   return false;
+}
+
+function TransportControls({
+  isPlaying,
+  toggle,
+  playPrev,
+  playNext,
+  compact = false,
+}: {
+  isPlaying: boolean;
+  toggle: () => void;
+  playPrev: () => void;
+  playNext: () => void;
+  compact?: boolean;
+}) {
+  const btnClass = compact
+    ? "grid h-10 w-10 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
+    : "grid h-9 w-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]";
+  const playClass = compact
+    ? "grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_0_0_4px_var(--accent-soft)] transition hover:brightness-110"
+    : "grid h-10 w-10 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_0_0_4px_var(--accent-soft)] transition hover:brightness-110";
+
+  return (
+    <div className={`flex items-center ${compact ? "shrink-0 gap-3" : "justify-start gap-1.5 md:justify-center"}`}>
+      <button
+        type="button"
+        onClick={playPrev}
+        className={btnClass}
+        aria-label="Previous track"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <path d="M6 6h2v12H6V6zm3.5 6 8.5 6V6l-8.5 6z" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        onClick={toggle}
+        className={playClass}
+        aria-label={isPlaying ? "Pause" : "Play"}
+      >
+        {isPlaying ? (
+          <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M7 6h3v12H7V6zm7 0h3v12h-3V6z" />
+          </svg>
+        ) : (
+          <svg className="ml-0.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <path d="M8 5.5v13l11-6.5L8 5.5z" />
+          </svg>
+        )}
+      </button>
+      <button
+        type="button"
+        onClick={playNext}
+        className={btnClass}
+        aria-label="Next track"
+      >
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+          <path d="M16 6h2v12h-2V6zM6 18l8.5-6L6 6v12z" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 export function BottomPlayer() {
@@ -72,16 +135,62 @@ export function BottomPlayer() {
 
   return (
     <>
-      {/* In-flow spacer: pushes page scroll end above the fixed player. */}
       <div className="w-full shrink-0" style={{ height: spacerHeight }} aria-hidden />
 
       <div
         ref={shellRef}
-        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 lg:left-[var(--nav-width)]"
+        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-tab-bar-height,49px)+env(safe-area-inset-bottom,0px))] z-50 lg:bottom-0 lg:left-[var(--nav-width)]"
       >
-        <div className="pointer-events-auto border-t border-[var(--line)] bg-[rgba(8,14,22,0.94)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:border-l lg:border-[var(--line)]">
+        {/* Mobile: title + transport */}
+        <div className="pointer-events-auto border-t border-[var(--line)] bg-[rgba(8,14,22,0.94)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:hidden">
+          <PlayerProgressBar />
+          <div className="flex h-14 items-center gap-3 px-3">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-semibold tracking-tight text-[var(--ink)]">
+                {current.title}
+              </div>
+              {flashMessage ? (
+                <div className="truncate text-[11px] text-[var(--available)]">{flashMessage}</div>
+              ) : showLicense && !current.preview ? (
+                <div
+                  className={`truncate text-[11px] ${
+                    status === "clear"
+                      ? "text-[var(--available)]"
+                      : status === "library"
+                        ? "text-[var(--library)]"
+                        : status === "exclusive"
+                          ? "text-[var(--exclusive)]"
+                          : status === "personal"
+                            ? "text-[var(--personal)]"
+                            : "text-[var(--hold)]"
+                  }`}
+                >
+                  {licenseLabel(current.license)}
+                </div>
+              ) : null}
+            </div>
+            <TransportControls
+              compact
+              isPlaying={isPlaying}
+              toggle={toggle}
+              playPrev={playPrev}
+              playNext={playNext}
+            />
+            {!current.preview ? (
+              <PlayerOverflowMenu
+                trackId={current.id}
+                trackTitle={current.title}
+                showGoToTrack
+                showAddToPlaylist
+                className="shrink-0"
+              />
+            ) : null}
+          </div>
+        </div>
+
+        {/* Desktop: full player */}
+        <div className="pointer-events-auto hidden border-t border-[var(--line)] bg-[rgba(8,14,22,0.94)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:block lg:border-l lg:border-[var(--line)]">
           <div className="mx-auto grid max-w-[1600px] gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_auto] md:items-center md:gap-5 md:px-6 md:py-3.5">
-            {/* Track meta */}
             <div className="min-w-0 order-1">
               <div className="truncate text-sm font-semibold tracking-tight text-[var(--ink)] md:text-[15px]">
                 {current.title}
@@ -112,47 +221,15 @@ export function BottomPlayer() {
               </div>
             </div>
 
-            {/* Transport */}
-            <div className="order-2 flex items-center justify-start gap-1.5 md:justify-center">
-              <button
-                type="button"
-                onClick={playPrev}
-                className="grid h-9 w-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
-                aria-label="Previous track"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M6 6h2v12H6V6zm3.5 6 8.5 6V6l-8.5 6z" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={toggle}
-                className="grid h-10 w-10 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_0_0_4px_var(--accent-soft)] transition hover:brightness-110"
-                aria-label={isPlaying ? "Pause" : "Play"}
-              >
-                {isPlaying ? (
-                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <path d="M7 6h3v12H7V6zm7 0h3v12h-3V6z" />
-                  </svg>
-                ) : (
-                  <svg className="ml-0.5 h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                    <path d="M8 5.5v13l11-6.5L8 5.5z" />
-                  </svg>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={playNext}
-                className="grid h-9 w-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
-                aria-label="Next track"
-              >
-                <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-                  <path d="M16 6h2v12h-2V6zM6 18l8.5-6L6 6v12z" />
-                </svg>
-              </button>
+            <div className="order-2">
+              <TransportControls
+                isPlaying={isPlaying}
+                toggle={toggle}
+                playPrev={playPrev}
+                playNext={playNext}
+              />
             </div>
 
-            {/* Waveform + times */}
             <div className="order-4 flex min-w-0 items-center gap-2.5 md:order-3">
               <PlayerTime which="current" className="w-9 text-right text-[11px]" />
               <div className="player-waveform min-w-0 flex-1 overflow-hidden">
@@ -161,7 +238,6 @@ export function BottomPlayer() {
               <PlayerTime which="duration" className="w-9 text-[11px]" />
             </div>
 
-            {/* Actions */}
             <div className="order-3 ml-auto flex items-center gap-1 md:order-4 md:ml-0">
               {!current.preview ? (
                 <button

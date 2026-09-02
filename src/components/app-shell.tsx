@@ -1,5 +1,6 @@
 import { Suspense, type ReactNode } from "react";
 import { AppNav } from "@/components/app-nav";
+import { MobileTabBar } from "@/components/mobile-tab-bar";
 import { canManageCatalog, getSession, isSiteAdmin } from "@/lib/auth";
 import { countPendingApprovals } from "@/lib/pending-approval-count";
 import { getAvailableCount, getTrackCount } from "@/lib/queries";
@@ -46,7 +47,16 @@ export async function AppShell({
           pendingUserCount={pendingUserCount}
         />
       </Suspense>
-      <div className="flex min-w-0 flex-1 flex-col lg:flex-row">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col pb-[var(--mobile-chrome-bottom)] lg:flex-row lg:pb-0">
+        {children}
+      </div>
+      {!isGuest ? (
+        <MobileTabBar
+          userEmail={session?.user?.email}
+          userName={session?.user?.name}
+          userImage={session?.user?.image}
+        />
+      ) : null}
     </div>
   );
 }

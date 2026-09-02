@@ -314,6 +314,69 @@ function PlayerSeekBar() {
   );
 }
 
+/** Thin playback progress — tap or drag to seek (mobile-friendly scrubber). */
+export function PlayerProgressBar({
+  className = "",
+  seekable = true,
+}: {
+  className?: string;
+  seekable?: boolean;
+}) {
+  const { seek } = usePlayer();
+  const { progress, duration } = usePlayerProgress();
+  const barRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef(false);
+  const pct = duration > 0 ? Math.min(100, (progress / duration) * 100) : 0;
+  const disabled = !seekable || duration <= 0;
+
+  const seekFromClientX = (clientX: number) => {
+    const bar = barRef.current;
+    if (!bar || duration <= 0) return;
+    const rect = bar.getBoundingClientRect();
+    if (rect.width <= 0) return;
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+    seek(ratio * duration);
+  };
+
+  const endDrag = (pointerId: number) => {
+    draggingRef.current = false;
+    try {
+      barRef.current?.releasePointerCapture(pointerId);
+    } catch {
+      // ignore if capture was already released
+    }
+  };
+
+  return (
+    <div
+      ref={barRef}
+      className={`player-progress-bar ${disabled ? "" : "player-progress-bar-seekable"} ${className}`}
+      role="slider"
+      aria-valuenow={Math.round(progress)}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(duration) || 0}
+      aria-label="Seek"
+      aria-disabled={disabled || undefined}
+      onPointerDown={(e) => {
+        if (disabled) return;
+        draggingRef.current = true;
+        barRef.current?.setPointerCapture(e.pointerId);
+        seekFromClientX(e.clientX);
+      }}
+      onPointerMove={(e) => {
+        if (!draggingRef.current || disabled) return;
+        seekFromClientX(e.clientX);
+      }}
+      onPointerUp={(e) => endDrag(e.pointerId)}
+      onPointerCancel={(e) => endDrag(e.pointerId)}
+    >
+      <div className="player-progress-track">
+        <div className="player-progress-fill" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function formatTime(seconds: number) {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const m = Math.floor(seconds / 60);

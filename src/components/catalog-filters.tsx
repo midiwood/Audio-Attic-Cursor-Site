@@ -52,14 +52,14 @@ function FilterRow({
   tone,
   children,
 }: {
-  label: string;
+  label: ReactNode;
   tone?: TagTone;
   children: ReactNode;
 }) {
   return (
-    <label className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
+    <label className="catalog-filter-row">
       <span
-        className={`truncate text-[10px] font-medium uppercase tracking-[0.12em] ${
+        className={`catalog-filter-label ${
           tone ? TAG_TONE_LABEL[tone] : "text-[var(--ink-dim)]"
         }`}
       >
@@ -120,7 +120,7 @@ function MultiFacetField({
 
   return (
     <select
-      className={`${fieldClass} text-[var(--ink-dim)] ${tone ? TAG_TONE_FIELD[tone] : ""}`}
+      className={`catalog-filter-select ${fieldClass} text-[var(--ink-muted)] ${tone ? TAG_TONE_FIELD[tone] : ""}`}
       value=""
       onChange={(e) => {
         const value = e.target.value;
@@ -130,7 +130,7 @@ function MultiFacetField({
       aria-label={addLabel}
       title={addLabel}
     >
-      <option value="">+</option>
+      <option value="">{addLabel}…</option>
       {ordered.map((item) => {
         const isAvailable = available.has(item);
         return (
@@ -334,8 +334,7 @@ export function CatalogFilters({
     });
   }, [router]);
 
-  const fieldClass =
-    "w-full rounded-md border border-[var(--line)] bg-[var(--bg)] px-2.5 py-1.5 text-sm text-[var(--ink)] outline-none transition focus:border-[var(--accent)] focus:ring-1 focus:ring-[var(--accent-soft)]";
+  const fieldClass = "catalog-filter-field";
 
   const yearItems = useMemo(() => options.years.map(String), [options.years]);
 
@@ -410,12 +409,12 @@ export function CatalogFilters({
   );
 
   return (
-    <div>
-      <div className={`mb-3 flex items-center justify-between gap-2 ${pending ? "opacity-70" : ""}`}>
-        <p className="min-w-0 text-[11px] tabular-nums text-[var(--ink-dim)]">
+    <div className="catalog-filters">
+      <div className={`mb-2 flex items-center justify-between gap-2 ${pending ? "opacity-70" : ""}`}>
+        <p className="min-w-0 text-xs tabular-nums text-[var(--ink-dim)]">
           {typeof matchCount === "number" ? (
             matchCount === 0 && hasActiveFilters ? (
-              <>0 matches — try removing a filter</>
+              <>No matches — try removing a filter</>
             ) : (
               <>
                 {matchCount.toLocaleString()} track{matchCount === 1 ? "" : "s"}
@@ -430,155 +429,158 @@ export function CatalogFilters({
             type="button"
             onClick={resetFilters}
             disabled={pending}
-            className="shrink-0 text-[11px] font-medium text-[var(--ink-dim)] transition hover:text-[var(--exclusive)] disabled:cursor-not-allowed disabled:opacity-30"
+            className="catalog-filter-reset shrink-0"
           >
-            Reset
+            Reset all
           </button>
         ) : (
           <span className="h-4" />
         )}
       </div>
 
-      <form className="space-y-2.5" onSubmit={(e) => e.preventDefault()}>
-        <label className="block">
+      <form className="space-y-2" onSubmit={(e) => e.preventDefault()}>
+        <label className="catalog-filter-search block">
           <span className="sr-only">Search</span>
-          <input
-            ref={searchInputRef}
-            className={fieldClass}
-            value={searchDraft}
-            placeholder="Search anything…"
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => {
-              const value = e.target.value;
-              liveSearchDraft = value;
-              setSearchDraft(value);
-              updateSearch(value);
-            }}
-            onBlur={() => {
-              window.setTimeout(() => {
-                const active = document.activeElement;
-                const stillTyping =
-                  active instanceof HTMLInputElement && active === searchInputRef.current;
-                if (!stillTyping) liveSearchDraft = null;
-              }, 0);
-            }}
-          />
+          <span className="catalog-filter-search-wrap">
+            <svg className="catalog-filter-search-icon" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <circle cx="11" cy="11" r="6.25" stroke="currentColor" strokeWidth="1.75" />
+              <path d="M16 16l4.5 4.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+            </svg>
+            <input
+              ref={searchInputRef}
+              className={`${fieldClass} catalog-filter-search-input`}
+              value={searchDraft}
+              placeholder="Search title, client, tags…"
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(e) => {
+                const value = e.target.value;
+                liveSearchDraft = value;
+                setSearchDraft(value);
+                updateSearch(value);
+              }}
+              onBlur={() => {
+                window.setTimeout(() => {
+                  const active = document.activeElement;
+                  const stillTyping =
+                    active instanceof HTMLInputElement && active === searchInputRef.current;
+                  if (!stillTyping) liveSearchDraft = null;
+                }, 0);
+              }}
+            />
+          </span>
         </label>
 
-        <div className="space-y-2 border-t border-[var(--line)] pt-2.5">
-          {!hideLicenseFilter || showSamroFilter ? (
-            <div className="space-y-2 border-b border-[var(--line)] pb-2.5">
-              <p className="text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ink-dim)]">
-                Staff
-              </p>
-              {hideLicenseFilter ? null : (
-                <FilterRow label="License">
-                  <select
-                    className={fieldClass}
-                    value={licenseValue}
-                    onChange={(e) => update("license", e.target.value)}
+        <div className="catalog-filter-section">
+          <div className="catalog-filter-fields">
+            {hideLicenseFilter ? null : (
+              <FilterRow label="License">
+                <select
+                  className={`catalog-filter-select ${fieldClass}`}
+                  value={licenseValue}
+                  onChange={(e) => update("license", e.target.value)}
+                >
+                  <option value="all">All tracks</option>
+                  <option
+                    value="available"
+                    disabled={!available.licenses.available && licenseValue !== "available"}
                   >
-                    <option value="all">All tracks</option>
-                    <option
-                      value="available"
-                      disabled={!available.licenses.available && licenseValue !== "available"}
-                    >
-                      {available.licenses.available || licenseValue === "available"
-                        ? "Available"
-                        : "Available · none"}
-                    </option>
-                    <option
-                      value="clear"
-                      disabled={!available.licenses.clear && licenseValue !== "clear"}
-                    >
-                      {available.licenses.clear || licenseValue === "clear" ? "Clear" : "Clear · none"}
-                    </option>
-                    <option
-                      value="library"
-                      disabled={!available.licenses.library && licenseValue !== "library"}
-                    >
-                      {available.licenses.library || licenseValue === "library"
-                        ? "Library"
-                        : "Library · none"}
-                    </option>
-                    <option
-                      value="exclusive"
-                      disabled={!available.licenses.exclusive && licenseValue !== "exclusive"}
-                    >
-                      {available.licenses.exclusive || licenseValue === "exclusive"
-                        ? "Exclusive"
-                        : "Exclusive · none"}
-                    </option>
-                    <option
-                      value="hold"
-                      disabled={!available.licenses.hold && licenseValue !== "hold"}
-                    >
-                      {available.licenses.hold || licenseValue === "hold"
-                        ? "On Hold"
-                        : "On Hold · none"}
-                    </option>
-                    <option
-                      value="personal"
-                      disabled={!available.licenses.personal && licenseValue !== "personal"}
-                    >
-                      {available.licenses.personal || licenseValue === "personal"
-                        ? "Personal"
-                        : "Personal · none"}
-                    </option>
-                  </select>
-                </FilterRow>
-              )}
+                    {available.licenses.available || licenseValue === "available"
+                      ? "Available"
+                      : "Available · none"}
+                  </option>
+                  <option
+                    value="clear"
+                    disabled={!available.licenses.clear && licenseValue !== "clear"}
+                  >
+                    {available.licenses.clear || licenseValue === "clear" ? "Clear" : "Clear · none"}
+                  </option>
+                  <option
+                    value="library"
+                    disabled={!available.licenses.library && licenseValue !== "library"}
+                  >
+                    {available.licenses.library || licenseValue === "library"
+                      ? "Library"
+                      : "Library · none"}
+                  </option>
+                  <option
+                    value="exclusive"
+                    disabled={!available.licenses.exclusive && licenseValue !== "exclusive"}
+                  >
+                    {available.licenses.exclusive || licenseValue === "exclusive"
+                      ? "Exclusive"
+                      : "Exclusive · none"}
+                  </option>
+                  <option
+                    value="hold"
+                    disabled={!available.licenses.hold && licenseValue !== "hold"}
+                  >
+                    {available.licenses.hold || licenseValue === "hold"
+                      ? "On Hold"
+                      : "On Hold · none"}
+                  </option>
+                  <option
+                    value="personal"
+                    disabled={!available.licenses.personal && licenseValue !== "personal"}
+                  >
+                    {available.licenses.personal || licenseValue === "personal"
+                      ? "Personal"
+                      : "Personal · none"}
+                  </option>
+                </select>
+              </FilterRow>
+            )}
 
-              {showSamroFilter ? (
-                <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-2">
-                  <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ink-dim)]">
+            {showSamroFilter ? (
+              <FilterRow
+                label={
+                  <span className="inline-flex items-center gap-1">
                     SAMRO
                     <PrepareProInfo />
                   </span>
-                  <select
-                    className={fieldClass}
-                    value={
-                      samroValue === "yes" || samroValue === "no" || samroValue === "prepare"
-                        ? samroValue
-                        : "all"
-                    }
-                    onChange={(e) => update("samro", e.target.value)}
-                    title="SAMRO PRO submission status"
-                  >
-                    <option value="all">All tracks</option>
-                    <option value="prepare">Prepare PRO</option>
-                    <option value="yes">Submitted</option>
-                    <option value="no">Not submitted</option>
-                  </select>
-                </div>
-              ) : null}
-
-              <FilterRow label="Year">
+                }
+              >
                 <select
-                  className={fieldClass}
-                  value={yearValue}
-                  onChange={(e) => update("year", e.target.value)}
+                  className={`catalog-filter-select ${fieldClass}`}
+                  value={
+                    samroValue === "yes" || samroValue === "no" || samroValue === "prepare"
+                      ? samroValue
+                      : "all"
+                  }
+                  onChange={(e) => update("samro", e.target.value)}
+                  title="SAMRO PRO submission status"
                 >
-                  <option value="">All years</option>
-                  {yearItems.map((year) => {
-                    const isAvailable = availableSets.years.has(year);
-                    return (
-                      <option
-                        key={year}
-                        value={year}
-                        disabled={!isAvailable && yearValue !== year}
-                      >
-                        {isAvailable || yearValue === year ? year : `${year} · none`}
-                      </option>
-                    );
-                  })}
+                  <option value="all">All tracks</option>
+                  <option value="prepare">Prepare PRO</option>
+                  <option value="yes">Submitted</option>
+                  <option value="no">Not submitted</option>
                 </select>
               </FilterRow>
-            </div>
-          ) : null}
+            ) : null}
 
-          <FilterRow label="Genre" tone="genre">
+            <FilterRow label="Year">
+              <select
+                className={`catalog-filter-select ${fieldClass}`}
+                value={yearValue}
+                onChange={(e) => update("year", e.target.value)}
+              >
+                <option value="">All years</option>
+                {yearItems.map((year) => {
+                  const isAvailable = availableSets.years.has(year);
+                  return (
+                    <option
+                      key={year}
+                      value={year}
+                      disabled={!isAvailable && yearValue !== year}
+                    >
+                      {isAvailable || yearValue === year ? year : `${year} · none`}
+                    </option>
+                  );
+                })}
+              </select>
+            </FilterRow>
+
+            <FilterRow label="Genre" tone="genre">
             <MultiFacetField
               items={options.genres}
               available={availableSets.genres}
@@ -625,13 +627,11 @@ export function CatalogFilters({
               onChange={(next) => updateList("attribute", next)}
             />
           </FilterRow>
+          </div>
         </div>
 
         {selectedChips.length || searchDraft.trim() ? (
-          <div className="border-t border-[var(--line)] pt-3">
-            <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[var(--ink-dim)]">
-              Selected
-            </p>
+          <div className="catalog-filter-chips">
             <div className="flex flex-wrap gap-1.5">
               {searchDraft.trim() ? (
                 <button
@@ -644,7 +644,7 @@ export function CatalogFilters({
                     next.delete("q");
                     pushParams(next, "replace");
                   }}
-                  className="rounded-full border border-[var(--line)] bg-[rgba(0,0,0,0.2)] px-2.5 py-1 text-[11px] font-normal leading-none text-[var(--ink-muted)] transition hover:brightness-110"
+                  className="catalog-filter-chip catalog-filter-chip-neutral"
                   title="Clear search"
                 >
                   “{searchDraft.trim()}” ×
@@ -653,13 +653,13 @@ export function CatalogFilters({
               {selectedChips.map((chip) => {
                 const pillClass = chip.tone
                   ? TAG_TONE_PILL[chip.tone]
-                  : "border-[var(--line)] bg-[rgba(0,0,0,0.2)] text-[var(--ink-muted)]";
+                  : "catalog-filter-chip-neutral";
                 return (
                   <button
                     key={`${chip.key}:${chip.value}`}
                     type="button"
                     onClick={() => removeChip(chip)}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-normal leading-none transition hover:brightness-110 ${pillClass}`}
+                    className={`catalog-filter-chip ${pillClass}`}
                     title={`Remove ${chip.value}`}
                   >
                     {chip.value} ×
@@ -667,15 +667,8 @@ export function CatalogFilters({
                 );
               })}
             </div>
-            <p className="mt-2 text-[10px] leading-relaxed text-[var(--ink-dim)]">
-              Within a category: any match. Across categories: all must match.
-            </p>
           </div>
-        ) : (
-          <p className="border-t border-[var(--line)] pt-3 text-[10px] leading-relaxed text-[var(--ink-dim)]">
-            Within a category: any match. Across categories: all must match.
-          </p>
-        )}
+        ) : null}
       </form>
     </div>
   );

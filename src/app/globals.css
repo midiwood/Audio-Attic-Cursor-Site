@@ -23,6 +23,17 @@
   --nav-width: 14rem;
   /* Set by BottomPlayer when a track is loaded */
   --bottom-player-height: 0px;
+  /* Mobile tab bar (hidden at lg+) */
+  --mobile-tab-bar-height: 49px;
+  --mobile-chrome-bottom: calc(
+    var(--bottom-player-height) + var(--mobile-tab-bar-height) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --mobile-tab-bar-height: 0px;
+  }
 }
 
 @theme inline {
@@ -76,6 +87,7 @@ input,
 select,
 textarea {
   font-family: inherit;
+  color: inherit;
 }
 
 /* Keep Chrome/Safari autofill from washing dark inputs light */
@@ -99,7 +111,13 @@ select:-webkit-autofill {
 }
 
 html {
-  scroll-padding-bottom: var(--bottom-player-height, 0px);
+  scroll-padding-bottom: var(--mobile-chrome-bottom, var(--bottom-player-height, 0px));
+}
+
+@media (min-width: 1024px) {
+  html {
+    scroll-padding-bottom: var(--bottom-player-height, 0px);
+  }
 }
 .player-waveform,
 .player-waveform > div,
@@ -137,4 +155,168 @@ html {
   animation: attic-pipeline-pulse 1.7s ease-in-out infinite;
 }
 
+/* Catalog filter panel */
+.catalog-filter-field {
+  width: 100%;
+  border-radius: 0.5rem;
+  border: 1px solid var(--line);
+  background: var(--bg-elevated);
+  padding: 0.4rem 0.55rem;
+  font-size: 0.8125rem;
+  color: var(--ink);
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
 
+.catalog-filter-field:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.catalog-filter-select {
+  appearance: none;
+  cursor: pointer;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' viewBox='0 0 24 24'%3E%3Cpath stroke='%239db0c7' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.75' d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.65rem center;
+  background-size: 1rem;
+}
+
+.catalog-filter-row {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.catalog-filter-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.catalog-filter-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+.catalog-filter-search-wrap {
+  position: relative;
+  display: block;
+}
+
+.catalog-filter-search-icon {
+  pointer-events: none;
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  height: 1rem;
+  width: 1rem;
+  transform: translateY(-50%);
+  color: var(--ink-dim);
+}
+
+.catalog-filter-search-input {
+  padding-left: 2.1rem;
+  font-size: 0.875rem;
+}
+
+.catalog-filter-section {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.catalog-filter-group {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 0.75rem;
+}
+
+.catalog-filter-group-title {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.catalog-filter-reset {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  transition: color 0.15s ease;
+}
+
+.catalog-filter-reset:hover:not(:disabled) {
+  color: var(--exclusive);
+}
+
+.catalog-filter-reset:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.catalog-filter-chips {
+  border-top: 1px solid var(--line);
+  padding-top: 0.5rem;
+}
+
+.catalog-filter-chip {
+  border-radius: 9999px;
+  border: 1px solid var(--line);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  line-height: 1;
+  transition: filter 0.15s ease;
+}
+
+.catalog-filter-chip:hover {
+  filter: brightness(1.08);
+}
+
+.catalog-filter-chip-neutral {
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--ink-muted);
+}
+
+.catalog-filter-hint {
+  font-size: 0.6875rem;
+  line-height: 1.45;
+  color: var(--ink-dim);
+}
+
+/* Player progress scrubber */
+.player-progress-bar {
+  position: relative;
+  padding: 0.625rem 0;
+  touch-action: none;
+}
+
+.player-progress-bar-seekable {
+  cursor: pointer;
+}
+
+.player-progress-track {
+  height: 2px;
+  width: 100%;
+  background: rgba(148, 173, 204, 0.14);
+}
+
+.player-progress-bar-thick .player-progress-track {
+  height: 3px;
+}
+
+.player-progress-fill {
+  height: 100%;
+  background: color-mix(in srgb, var(--accent) 75%, transparent);
+  pointer-events: none;
+}
