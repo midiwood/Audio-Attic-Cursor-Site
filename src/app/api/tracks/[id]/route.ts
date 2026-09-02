@@ -12,6 +12,7 @@ import {
 import { listRelationsForTrack, setDerivedFromLinks } from "@/lib/track-relation-queries";
 import {
   canonicalizeLicense,
+  hasPlayableAudio,
   isMp3AudioUrl,
   licenseFieldVisibility,
   mp3OnlyErrorMessage,
@@ -125,10 +126,14 @@ export async function PATCH(
   const dropboxLink = dropboxLinkProvided
     ? String(body.dropboxLink ?? "").trim()
     : (existing.dropboxLink ?? "").trim();
-  if (!dropboxLink) {
-    return NextResponse.json({ error: "Track has no vault audio link" }, { status: 400 });
+  const hasVaultAudio = hasPlayableAudio({
+    dropboxPath: existing.dropboxPath,
+    dropboxDl: existing.dropboxDl,
+  });
+  if (!hasVaultAudio && !dropboxLink) {
+    return NextResponse.json({ error: "Track has no vault audio" }, { status: 400 });
   }
-  if (dropboxLinkProvided && !isMp3AudioUrl(dropboxLink)) {
+  if (dropboxLinkProvided && dropboxLink && !isMp3AudioUrl(dropboxLink)) {
     return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
   }
 
@@ -155,8 +160,9 @@ export async function PATCH(
   let saved = upsertTrack({
     id: existing.id,
     date: existing.date,
-    dropboxLink,
-    dropboxDl: toDropboxDlUrl(dropboxLink),
+    dropboxLink: dropboxLink || existing.dropboxLink,
+    dropboxDl: dropboxLink ? toDropboxDlUrl(dropboxLink) : existing.dropboxDl,
+    dropboxPath: existing.dropboxPath,
     workingTitle,
     libraryTitle,
     client: String(body.client ?? existing.client ?? "").trim() || null,

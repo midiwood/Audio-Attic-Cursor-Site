@@ -2,6 +2,7 @@ import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { trackWaveforms, tracks } from "@/db/schema";
 import { formatAudioDuration } from "@/lib/audio-duration";
+import { hasPlayableAudio } from "@/lib/tracks";
 import { ensureTrackWaveform } from "@/lib/waveform-generate";
 import { getTrackWaveform } from "@/lib/waveform-queries";
 
@@ -21,11 +22,12 @@ export function countTracksMissingDuration(): number {
 
 export function listTracksMissingDuration(
   limit = 25,
-): Array<{ id: string; dropboxDl: string | null }> {
+): Array<{ id: string; dropboxPath: string | null; dropboxDl: string | null }> {
   const capped = Math.max(1, Math.min(limit, 100));
   return db
     .select({
       id: tracks.id,
+      dropboxPath: tracks.dropboxPath,
       dropboxDl: tracks.dropboxDl,
     })
     .from(tracks)
@@ -94,17 +96,16 @@ export function setTrackDurationIfEmpty(trackId: string, seconds: number): boole
 export async function backfillDurationsFromAudio(
   limit = 10,
 ): Promise<{ processed: number; updated: number; failed: number; ids: string[] }> {
-  const batch = listTracksMissingDuration(limit).filter((row) => Boolean(row.dropboxDl?.trim()));
+  const batch = listTracksMissingDuration(limit).filter((row) => hasPlayableAudio(row));
   let updated = 0;
   let failed = 0;
   const ids: string[] = [];
 
   for (const row of batch) {
-    const dropboxDl = row.dropboxDl!.trim();
     let seconds: number | null = getTrackWaveform(row.id)?.duration ?? null;
 
     if (!seconds) {
-      await ensureTrackWaveform(row.id, dropboxDl);
+      await ensureTrackWaveform(row.id, row);
       seconds = getTrackWaveform(row.id)?.duration ?? null;
     }
 

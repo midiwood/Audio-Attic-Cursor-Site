@@ -3,13 +3,16 @@ import { getCatalogStaffSession } from "@/lib/auth";
 import { AI_QUOTA_MESSAGE, isAiQuotaError } from "@/lib/ai-errors";
 import { analyzeAudioBytes } from "@/lib/audio-analysis";
 import { getAiRuntimeConfig, resolveSetting, SETTINGS, upsertSetting } from "@/lib/site-settings";
+import { isSpacesObjectKey } from "@/lib/storage/paths";
+import { getObjectBuffer } from "@/lib/storage/spaces";
 import { normalizeLicenseStatus, filenameFromDropboxUrl, normalizeMusicalKey, titleFromDropboxUrl, titleFromFilename, toDropboxDlUrl } from "@/lib/tracks";
 import { getCatalogVocabulary, pickFromVocabulary } from "@/lib/vocabulary";
 
 export const runtime = "nodejs";
 
 type SuggestInput = {
-  dropboxLink: string;
+  dropboxLink?: string;
+  dropboxPath?: string;
   title?: string;
   notes?: string;
   client?: string;
@@ -78,8 +81,26 @@ function guessMime(filenameOrUrl: string, fallback = "audio/mpeg") {
   return fallback;
 }
 
-async function fetchDropboxAudio(dropboxLink: string): Promise<{ bytes: Buffer; mimeType: string } | null> {
-  const target = toDropboxDlUrl(dropboxLink);
+async function fetchVaultAudio(source: {
+  dropboxPath?: string;
+  dropboxLink?: string;
+}): Promise<{ bytes: Buffer; mimeType: string } | null> {
+  const key = source.dropboxPath?.trim() || "";
+  if (key && isSpacesObjectKey(key)) {
+    try {
+      let bytes = await getObjectBuffer(key);
+      if (bytes.length > MAX_AUDIO_BYTES) bytes = bytes.subarray(0, MAX_AUDIO_BYTES);
+      return {
+        bytes,
+        mimeType: guessMime(key),
+      };
+    } catch {
+      return null;
+    }
+  }
+  const link = source.dropboxLink?.trim() || "";
+  if (!link) return null;
+  const target = toDropboxDlUrl(link);
   const res = await fetch(target, { redirect: "follow" });
   if (!res.ok) return null;
   const arrayBuffer = await res.arrayBuffer();
@@ -89,7 +110,7 @@ async function fetchDropboxAudio(dropboxLink: string): Promise<{ bytes: Buffer; 
   }
   const mimeType =
     res.headers.get("content-type")?.split(";")[0] ||
-    guessMime(dropboxLink);
+    guessMime(link);
   return { bytes, mimeType };
 }
 
@@ -322,6 +343,7 @@ export async function POST(req: NextRequest) {
 
   const prepared = tracks.map((track, index) => {
     const dropboxLink = String(track.dropboxLink || "").trim();
+    const dropboxPath = String(track.dropboxPath || "").trim();
     const fromFile = titleFromFilename(filenameFromDropboxUrl(dropboxLink));
     const title =
       titleFromFilename(String(track.title || "").trim()) ||
@@ -331,6 +353,7 @@ export async function POST(req: NextRequest) {
     return {
       index,
       dropboxLink,
+      dropboxPath,
       title,
       notes: String(track.notes || sharedNotes || "").trim(),
       client: String(track.client || sharedClient || "").trim(),
@@ -338,9 +361,9 @@ export async function POST(req: NextRequest) {
   });
 
   for (const track of prepared) {
-    if (!track.dropboxLink && !audioByIndex.has(track.index)) {
+    if (!track.dropboxPath && !track.dropboxLink && !audioByIndex.has(track.index)) {
       return NextResponse.json(
-        { error: "Each track needs a Dropbox link or attached audio" },
+        { error: "Each track needs vault audio or attached audio file" },
         { status: 400 },
       );
     }
@@ -354,7 +377,7 @@ export async function POST(req: NextRequest) {
     try {
       let audio = audioByIndex.get(track.index) || null;
       if (!audio) {
-        audio = await fetchDropboxAudio(track.dropboxLink);
+        audio = await fetchVaultAudio(track);
       }
       const measuredPromise = audio?.bytes?.length
         ? analyzeAudioBytes(audio.bytes, {

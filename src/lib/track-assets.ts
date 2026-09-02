@@ -107,8 +107,8 @@ export function insertTrackAsset(input: {
   kind: TrackAssetKind;
   label: string;
   slug: string;
-  dropboxLink: string;
-  dropboxDl: string;
+  dropboxLink: string | null;
+  dropboxDl: string | null;
   dropboxPath: string;
   duration?: string | null;
   sortOrder?: number;

@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession, getCatalogStaffSession, isSubscriber } from "@/lib/auth";
-import { dropboxAuthConfigured, dropboxAuthSetupMessage } from "@/lib/dropbox-auth";
 import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { getTrackById } from "@/lib/queries";
 import { isSubscriberVisible } from "@/lib/publisher";
+import { spacesConfigured, spacesSetupMessage } from "@/lib/vault-storage";
 import {
   deleteTrackAsset,
   getTrackAssetForTrack,
@@ -56,8 +56,8 @@ export async function POST(req: NextRequest, context: RouteContext) {
     );
   }
 
-  if (!dropboxAuthConfigured()) {
-    return NextResponse.json({ error: dropboxAuthSetupMessage() }, { status: 500 });
+  if (!spacesConfigured()) {
+    return NextResponse.json({ error: spacesSetupMessage() }, { status: 500 });
   }
 
   const { id } = await context.params;

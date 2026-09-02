@@ -15,7 +15,7 @@ export type ImportDraftTrack = {
   trackId?: string;
   stagingId?: string;
   dropboxLink: string;
-  dropboxDl?: string;
+  dropboxDl?: string | null;
   dropboxPath?: string;
   sourceDropboxPath?: string;
   sourceFolderLink?: string;
@@ -107,8 +107,8 @@ export async function buildDraftsFromFiles(
 
 export type VaultPrepareResult = {
   stagingId?: string;
-  dropboxLink: string;
-  dropboxDl: string;
+  dropboxLink: string | null;
+  dropboxDl: string | null;
   dropboxPath: string;
   sourceDropboxPath?: string | null;
   sourceFolderLink?: string | null;
@@ -264,13 +264,11 @@ export async function attachAudioBlobForAi(
     }
   }
 
-  if (!blob && track.vaultReady && track.dropboxLink.trim()) {
-    const preview = await fetch(
-      `/api/audio/preview?url=${encodeURIComponent(track.dropboxLink.trim())}`,
-    );
+  if (!blob && track.vaultReady && track.trackId) {
+    const preview = await fetch(`/api/audio?id=${encodeURIComponent(track.trackId)}`);
     if (preview.ok) {
       blob = await preview.blob();
-      filename = `${track.trackId || "track"}.mp3`;
+      filename = `${track.trackId}.mp3`;
     }
   }
 
@@ -280,11 +278,11 @@ export async function attachAudioBlobForAi(
 export async function prepareVaultForTrack(
   track: ImportDraftTrack,
 ): Promise<VaultPrepareResult> {
-  if (track.vaultReady && track.dropboxLink && track.dropboxDl && track.dropboxPath) {
+  if (track.vaultReady && track.dropboxPath) {
     return {
       stagingId: track.stagingId,
-      dropboxLink: track.dropboxLink,
-      dropboxDl: track.dropboxDl,
+      dropboxLink: track.dropboxLink ?? null,
+      dropboxDl: track.dropboxDl ?? null,
       dropboxPath: track.dropboxPath,
       sourceDropboxPath: track.sourceDropboxPath ?? null,
       sourceFolderLink: track.sourceFolderLink ?? null,
@@ -302,7 +300,7 @@ export async function prepareVaultForTrack(
   const res = await fetch("/api/tracks/prepare-vault", { method: "POST", body: form });
   const data = (await res.json().catch(() => ({}))) as VaultPrepareResult & { error?: string };
 
-  if (!res.ok || !data.dropboxLink || !data.dropboxDl || !data.dropboxPath) {
+  if (!res.ok || !data.dropboxPath) {
     throw new Error(data.error || `Vault prepare failed for ${track.workingTitle || "track"}`);
   }
 
@@ -432,7 +430,7 @@ export async function normalizeTracksToVault(opts: {
       mergeVaultOntoDraft(track, {
         stagingId: vault.stagingId,
         trackId: undefined,
-        dropboxLink: vault.dropboxLink,
+        dropboxLink: vault.dropboxLink ?? "",
         dropboxDl: vault.dropboxDl,
         dropboxPath: vault.dropboxPath,
         sourceDropboxPath: vault.sourceDropboxPath || undefined,

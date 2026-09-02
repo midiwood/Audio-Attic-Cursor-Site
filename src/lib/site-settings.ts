@@ -27,6 +27,13 @@ const ENV_FOR_KEY: Partial<Record<SettingKey, string>> = {
   [SETTINGS.DROPBOX_REFRESH_TOKEN]: "DROPBOX_REFRESH_TOKEN",
   [SETTINGS.DROPBOX_ACCESS_TOKEN]: "DROPBOX_ACCESS_TOKEN",
   [SETTINGS.DROPBOX_UPLOAD_FOLDER]: "DROPBOX_UPLOAD_FOLDER",
+  [SETTINGS.SPACES_KEY]: "DO_SPACES_KEY",
+  [SETTINGS.SPACES_SECRET]: "DO_SPACES_SECRET",
+  [SETTINGS.SPACES_BUCKET]: "DO_SPACES_BUCKET",
+  [SETTINGS.SPACES_REGION]: "DO_SPACES_REGION",
+  [SETTINGS.SPACES_PREFIX]: "DO_SPACES_PREFIX",
+  [SETTINGS.SPACES_PRESIGN_TTL_SEC]: "DO_SPACES_PRESIGN_TTL_SEC",
+  [SETTINGS.SPACES_CDN_ENDPOINT]: "DO_SPACES_CDN_ENDPOINT",
   [SETTINGS.RESEND_API_KEY]: "RESEND_API_KEY",
   [SETTINGS.MAIL_FROM]: "MAIL_FROM",
 };
@@ -38,6 +45,7 @@ const SECRET_KEYS = new Set<SettingKey>([
   SETTINGS.DROPBOX_APP_SECRET,
   SETTINGS.DROPBOX_REFRESH_TOKEN,
   SETTINGS.DROPBOX_ACCESS_TOKEN,
+  SETTINGS.SPACES_SECRET,
   SETTINGS.RESEND_API_KEY,
 ]);
 
@@ -118,6 +126,86 @@ export function getDropboxRuntimeConfig() {
     uploadFolder:
       resolveSetting(SETTINGS.DROPBOX_UPLOAD_FOLDER, "/_Business/Audio Attic/Vault") ||
       "/_Business/Audio Attic/Vault",
+  };
+}
+
+export function getSpacesRuntimeConfig() {
+  const ttlRaw = resolveSetting(SETTINGS.SPACES_PRESIGN_TTL_SEC, "14400");
+  const presignTtlSec = Math.max(300, Math.min(86400, Number.parseInt(ttlRaw, 10) || 14400));
+  const regionSetting = resolveSetting(SETTINGS.SPACES_REGION, "nyc3") || "nyc3";
+  const bucketRaw = resolveSetting(SETTINGS.SPACES_BUCKET);
+  const { bucket, region } = resolveSpacesBucketAndRegion(bucketRaw, regionSetting);
+  const cdn = resolveSetting(SETTINGS.SPACES_CDN_ENDPOINT)?.trim() || "";
+  return {
+    key: resolveSetting(SETTINGS.SPACES_KEY),
+    secret: resolveSetting(SETTINGS.SPACES_SECRET),
+    bucket,
+    region,
+    prefix: resolveSetting(SETTINGS.SPACES_PREFIX, "vault") || "vault",
+    presignTtlSec,
+    /** S3 API endpoint — always the datacenter origin, never the CDN URL. */
+    apiEndpoint: `https://${region}.digitaloceanspaces.com`,
+    cdnEndpoint: cdn || null,
+  };
+}
+
+/** Accept `nyc3`, `https://nyc3.digitaloceanspaces.com`, etc. */
+export function normalizeSpacesRegion(raw: string): string {
+  const trimmed = raw.trim();
+  const fromUrl = trimmed.match(/https?:\/\/([a-z0-9-]+)\.digitaloceanspaces\.com/i);
+  if (fromUrl?.[1]) return fromUrl[1];
+  return trimmed.replace(/^https?:\/\//, "").split(".")[0] || "nyc3";
+}
+
+/**
+ * Accept plain bucket names or pasted Space URLs.
+ * `my-bucket`, `my-bucket.nyc3.digitaloceanspaces.com`, `https://my-bucket.nyc3...`
+ */
+export function parseSpacesBucketInput(raw: string): { bucket: string; region?: string } {
+  const trimmed = raw.trim();
+  if (!trimmed) return { bucket: "" };
+
+  const host = trimmed.replace(/^https?:\/\//i, "").split("/")[0].split("?")[0];
+  const vhost = host.match(/^([a-z0-9][a-z0-9-]*)\.([a-z0-9-]+)\.digitaloceanspaces\.com$/i);
+  if (vhost) {
+    return { bucket: vhost[1], region: vhost[2] };
+  }
+
+  const pathBucket = trimmed.match(/digitaloceanspaces\.com\/([a-z0-9][a-z0-9-]*)/i);
+  if (pathBucket) {
+    return { bucket: pathBucket[1] };
+  }
+
+  return { bucket: trimmed.split("/")[0].trim() };
+}
+
+function resolveSpacesBucketAndRegion(
+  bucketRaw: string,
+  regionRaw: string,
+): { bucket: string; region: string } {
+  const parsed = parseSpacesBucketInput(bucketRaw);
+  const region = normalizeSpacesRegion(parsed.region || regionRaw || "nyc3");
+  return { bucket: parsed.bucket, region };
+}
+
+export function getSpacesSettingsView() {
+  return {
+    key: getSettingFieldStatus(SETTINGS.SPACES_KEY),
+    secret: getSettingFieldStatus(SETTINGS.SPACES_SECRET),
+    bucket: getSettingFieldStatus(SETTINGS.SPACES_BUCKET),
+    region: {
+      ...getSettingFieldStatus(SETTINGS.SPACES_REGION),
+      displayValue: resolveSetting(SETTINGS.SPACES_REGION, "nyc3") || "nyc3",
+    },
+    prefix: {
+      ...getSettingFieldStatus(SETTINGS.SPACES_PREFIX),
+      displayValue: resolveSetting(SETTINGS.SPACES_PREFIX, "vault") || "vault",
+    },
+    presignTtlSec: {
+      ...getSettingFieldStatus(SETTINGS.SPACES_PRESIGN_TTL_SEC),
+      displayValue: resolveSetting(SETTINGS.SPACES_PRESIGN_TTL_SEC, "14400") || "14400",
+    },
+    cdnEndpoint: getSettingFieldStatus(SETTINGS.SPACES_CDN_ENDPOINT),
   };
 }
 

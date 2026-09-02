@@ -18,9 +18,12 @@
     "db:migrate-ids-rjv": "tsx scripts/migrate-track-ids-to-rjv.ts",
     "seed": "tsx scripts/seed-from-sheet.ts",
     "dropbox:oauth": "node scripts/dropbox-oauth.mjs",
-    "dropbox:vault-migrate": "tsx scripts/migrate-to-vault.ts"
+    "dropbox:vault-migrate": "tsx scripts/migrate-to-vault.ts",
+    "spaces:migrate-from-dropbox": "tsx scripts/migrate-dropbox-to-spaces.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1124.0",
+    "@aws-sdk/s3-request-presigner": "^3.1124.0",
     "@wavesurfer/react": "^1.0.12",
     "archiver": "^8.0.0",
     "better-auth": "^1.6.27",

@@ -18,6 +18,7 @@ import {
   listPlaylistsForPicker,
   type PlaylistOption,
 } from "@/lib/last-playlist";
+import { hasPlayableAudio } from "@/lib/tracks";
 
 export type PlayerTrack = {
   id: string;
@@ -25,6 +26,7 @@ export type PlayerTrack = {
   subtitle?: string | null;
   duration?: string | null;
   dropboxDl?: string | null;
+  dropboxPath?: string | null;
   license?: string | null;
   /** Version or stem asset id for /api/audio?id=&asset= */
   assetId?: string | null;
@@ -39,12 +41,12 @@ export type PlayerTrack = {
 
 function resolveStreamUrl(track: PlayerTrack): string | null {
   if (track.audioSrc) return track.audioSrc;
-  if (track.dropboxDl || track.assetId) return audioUrlFor(track.id, track.assetId);
+  if (track.dropboxDl || track.dropboxPath || track.assetId) return audioUrlFor(track.id, track.assetId);
   return null;
 }
 
 function isPlayableTrack(track: PlayerTrack): boolean {
-  return Boolean(track.audioSrc || track.dropboxDl || track.assetId);
+  return Boolean(track.audioSrc || track.dropboxDl || track.dropboxPath || track.assetId);
 }
 
 export { isPlayableTrack };
@@ -206,10 +208,12 @@ function waveformUrlFor(trackId: string) {
   return `/api/tracks/${encodeURIComponent(trackId)}/waveform`;
 }
 
-/** ~256 KB ≈ 6–10 s of typical MP3. Range is bytes, not time. */
-const PREFETCH_AUDIO_RANGE_END = 262143;
-/** Let the current play's Dropbox fetch start before warming the next track. */
+/** ~256 KB head prefetch was via fetch when /api/audio proxied bytes; with Spaces we use a hidden <audio> instead. */
 const PREFETCH_NEXT_DELAY_MS = 1000;
+
+function prefetchCacheKey(track: PlayerTrack): string {
+  return `${track.id}:${track.assetId ?? ""}`;
+}
 
 function prefetchWaveform(trackId: string) {
   try {
@@ -224,22 +228,7 @@ function prefetchWaveform(trackId: string) {
   }
 }
 
-/** Small Range GET through /api/audio — one at a time, never from Browse. */
-function prefetchAudioHead(trackId: string, assetId?: string | null) {
-  try {
-    void fetch(audioUrlFor(trackId, assetId), {
-      method: "GET",
-      headers: { Range: `bytes=0-${PREFETCH_AUDIO_RANGE_END}` },
-      credentials: "same-origin",
-      cache: "force-cache",
-      priority: "low",
-    } as RequestInit).catch(() => {});
-  } catch {
-    // ignore
-  }
-}
-
-/** Warm stored waveform peaks. Browse uses this — no Dropbox audio proxy. */
+/** Warm stored waveform peaks. Browse uses this — no /api/audio. */
 export function prefetchTrackAudio(trackId: string) {
   prefetchWaveform(trackId);
 }
@@ -248,13 +237,13 @@ const warmedAudioIds = new Set<string>();
 
 /** Prefetch the first N playable tracks' waveforms (Browse). No /api/audio. */
 export function prefetchTopPlayable(
-  tracks: Array<{ id: string; dropboxDl?: string | null }>,
+  tracks: Array<{ id: string; dropboxDl?: string | null; dropboxPath?: string | null }>,
   count = 5,
 ) {
   let warmed = 0;
   for (const track of tracks) {
     if (warmed >= count) break;
-    if (!track.dropboxDl) continue;
+    if (!hasPlayableAudio(track)) continue;
     if (warmedAudioIds.has(track.id)) continue;
     warmedAudioIds.add(track.id);
     prefetchTrackAudio(track.id);
@@ -264,6 +253,8 @@ export function prefetchTopPlayable(
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchAudioRef = useRef<HTMLAudioElement | null>(null);
+  const prefetchedStreamRef = useRef<{ key: string; src: string } | null>(null);
   const prefetchRef = useRef<Set<string>>(new Set());
   const nextPrefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentRef = useRef<PlayerTrack | null>(null);
@@ -311,6 +302,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     audio.preload = "auto";
     audioRef.current = audio;
 
+    const prefetchAudio = new Audio();
+    prefetchAudio.preload = "auto";
+    prefetchAudio.muted = true;
+    prefetchAudioRef.current = prefetchAudio;
+
     const onEnded = () => {
       setIsPlaying(false);
     };
@@ -327,11 +323,36 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener("play", onPlay);
       audio.removeEventListener("pause", onPause);
       audioRef.current = null;
+      prefetchAudio.pause();
+      prefetchAudio.removeAttribute("src");
+      prefetchAudioRef.current = null;
+      prefetchedStreamRef.current = null;
       if (nextPrefetchTimerRef.current) {
         clearTimeout(nextPrefetchTimerRef.current);
         nextPrefetchTimerRef.current = null;
       }
     };
+  }, []);
+
+  const prefetchAudioHead = useCallback((track: PlayerTrack) => {
+    const el = prefetchAudioRef.current;
+    if (!el) return;
+
+    const key = prefetchCacheKey(track);
+    if (prefetchedStreamRef.current?.key === key) return;
+
+    const apiUrl = absoluteMediaUrl(audioUrlFor(track.id, track.assetId));
+
+    const onLoadedMetadata = () => {
+      const resolved = el.currentSrc || el.src;
+      if (resolved && resolved !== apiUrl) {
+        prefetchedStreamRef.current = { key, src: resolved };
+      }
+    };
+
+    el.addEventListener("loadedmetadata", onLoadedMetadata, { once: true });
+    el.pause();
+    el.src = apiUrl;
   }, []);
 
   const prefetchNeighbors = useCallback((track: PlayerTrack, list: PlayerTrack[]) => {
@@ -347,9 +368,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       if (prefetchRef.current.has(next.id)) return;
       prefetchRef.current.add(next.id);
       prefetchWaveform(next.id);
-      prefetchAudioHead(next.id, next.assetId);
+      prefetchAudioHead(next);
     }, PREFETCH_NEXT_DELAY_MS);
-  }, []);
+  }, [prefetchAudioHead]);
 
   const loadAndPlay = useCallback(
     async (track: PlayerTrack, list?: PlayerTrack[]) => {
@@ -357,16 +378,24 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       const src = resolveStreamUrl(track);
       if (!audio || !src) return;
       const absolute = absoluteMediaUrl(src);
+      const cacheKey = prefetchCacheKey(track);
+      const cachedStream =
+        prefetchedStreamRef.current?.key === cacheKey
+          ? prefetchedStreamRef.current.src
+          : null;
+      const targetSrc = cachedStream || absolute;
       const isSameSrc =
+        audio.src === targetSrc ||
         audio.src === absolute ||
         (!src.startsWith("blob:") && !/^https?:\/\//i.test(src) && audio.src.endsWith(src));
 
       setCurrent(track);
       if (!isSameSrc) {
         // Setting src starts load; do not call audio.load() — it aborts an in-flight play().
-        audio.src = src;
+        audio.src = targetSrc;
         flushPlayerProgress();
       }
+      if (cachedStream) prefetchedStreamRef.current = null;
 
       try {
         await audio.play();
@@ -496,6 +525,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     if (nextPrefetchTimerRef.current) {
       clearTimeout(nextPrefetchTimerRef.current);
       nextPrefetchTimerRef.current = null;
+    }
+    prefetchedStreamRef.current = null;
+    const prefetchAudio = prefetchAudioRef.current;
+    if (prefetchAudio) {
+      prefetchAudio.pause();
+      prefetchAudio.removeAttribute("src");
     }
     const audio = audioRef.current;
     if (audio) {

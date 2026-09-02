@@ -1,5 +1,6 @@
 /**
- * Copy existing catalog tracks into the Dropbox vault as -16 LUFS MP3s.
+ * Legacy: normalize existing source audio into the Spaces vault as -16 LUFS MP3s.
+ * Prefer `npm run spaces:migrate-from-dropbox` when copying already-vaulted Dropbox files.
  *
  *   npx tsx scripts/migrate-to-vault.ts --dry-run
  *   npx tsx scripts/migrate-to-vault.ts --apply [--limit N] [--id TRACK_ID] [--force]
@@ -9,8 +10,10 @@ import { eq, isNull, or } from "drizzle-orm";
 import { db } from "../src/db";
 import { tracks } from "../src/db/schema";
 import { dropboxAuthConfigured, dropboxAuthSetupMessage } from "../src/lib/dropbox-auth";
-import { vaultTrackMp3Path } from "../src/lib/dropbox-files";
+import { downloadFile } from "../src/lib/dropbox-files";
 import { upsertTrack } from "../src/lib/queries";
+import { vaultTrackMp3Key } from "../src/lib/storage/paths";
+import { spacesConfigured, spacesSetupMessage } from "../src/lib/storage/spaces";
 import { ingestTrackToVault } from "../src/lib/vault-ingest";
 import { ensureTrackWaveforms } from "../src/lib/waveform-generate";
 
@@ -27,6 +30,10 @@ async function main() {
   const limit = limitRaw ? Math.max(1, Number(limitRaw) || 0) : undefined;
   const onlyId = argValue("--id")?.trim();
 
+  if (!spacesConfigured()) {
+    console.error(spacesSetupMessage());
+    process.exit(1);
+  }
   if (!dropboxAuthConfigured()) {
     console.error(dropboxAuthSetupMessage());
     process.exit(1);
@@ -55,7 +62,7 @@ async function main() {
   let failed = 0;
 
   for (const track of rows) {
-    const planned = vaultTrackMp3Path(track.id);
+    const planned = vaultTrackMp3Key(track.id);
     if (dryRun) {
       console.log(`  would vault ${track.id} → ${planned}`);
       ok += 1;
@@ -64,10 +71,14 @@ async function main() {
 
     process.stdout.write(`  ${track.id} … `);
     try {
+      const sourceBytes = await downloadFile({
+        path: track.dropboxPath?.startsWith("/") ? track.dropboxPath : null,
+        sharedOrDlUrl: track.dropboxDl || track.dropboxLink,
+      });
+
       const vault = await ingestTrackToVault({
         trackId: track.id,
-        sourceDropboxPath: track.sourceDropboxPath,
-        sourceUrl: track.dropboxDl || track.dropboxLink,
+        sourceBytes,
         sourceHint: track.dropboxLink || track.libraryTitle || track.id,
       });
 
@@ -80,7 +91,7 @@ async function main() {
         sourceFolderLink: vault.sourceFolderLink ?? track.sourceFolderLink,
       });
 
-      await ensureTrackWaveforms([{ id: track.id, dropboxDl: vault.dropboxDl }], 1);
+      await ensureTrackWaveforms([{ id: track.id, dropboxPath: vault.dropboxPath }], 1);
       console.log(`ok → ${vault.dropboxPath}`);
       ok += 1;
     } catch (err) {

@@ -10,7 +10,7 @@ import {
   type Playlist,
   type Track,
 } from "@/db/schema";
-import { formatDisplayTitle } from "@/lib/tracks";
+import { formatDisplayTitle, hasPlayableAudio } from "@/lib/tracks";
 
 function playlistId() {
   return `pl_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
@@ -399,13 +399,14 @@ export function removeTrackFromPlaylist(playlistId: string, trackId: string): bo
 
 export function toPlayerQueue(trackList: Track[]) {
   return trackList
-    .filter((t) => t.dropboxDl)
+    .filter((t) => hasPlayableAudio(t))
     .map((t) => ({
       id: t.id,
       title: formatDisplayTitle(t),
       subtitle: [t.client, t.year].filter(Boolean).join(" · ") || null,
       duration: t.duration,
       dropboxDl: t.dropboxDl,
+      dropboxPath: t.dropboxPath,
       license: t.license,
     }));
 }

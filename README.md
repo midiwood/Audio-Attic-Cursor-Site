@@ -1,6 +1,8 @@
 # Audio Attic
 
-Local-first catalog portal for composed library tracks. Data is stored in SQLite, seeded from a published Google Sheet, with audio streamed from Dropbox.
+Local-first catalog portal for composed library tracks. Data is stored in SQLite, seeded from a published Google Sheet, with audio stored in a **private DigitalOcean Spaces** bucket.
+
+Playback and downloads **never stream through cPanel** — the Node app verifies auth, then returns a short-lived presigned URL; the browser streams directly from Spaces.
 
 ## Setup
 
@@ -43,28 +45,28 @@ Also set `BETTER_AUTH_SECRET` (or `SESSION_SECRET`) and `BETTER_AUTH_URL`.
 - `BETTER_AUTH_URL` — public app URL (e.g. `http://localhost:3000`)
 - `GEMINI_API_KEY` — AI tagging (Gemini multimodal listens to audio)
 - `GEMINI_MODEL` — optional (default `gemini-3.6-flash`)
-- `DROPBOX_APP_KEY` / `DROPBOX_APP_SECRET` / `DROPBOX_REFRESH_TOKEN` — long-term Dropbox API access (recommended)
-- `DROPBOX_ACCESS_TOKEN` — optional short-lived fallback (~4h) while migrating
-- `DROPBOX_UPLOAD_FOLDER` — vault root for durable −16 LUFS MP3 copies (default `/_Business/Audio Attic/Vault`)
-- Retrospective vault copy: `npm run dropbox:vault-migrate -- --dry-run` then `--apply`
+- `DO_SPACES_KEY` / `DO_SPACES_SECRET` — Spaces access credentials (Admin → Storage)
+- `DO_SPACES_BUCKET` / `DO_SPACES_REGION` — bucket name and region (e.g. `nyc3`)
+- `DO_SPACES_PREFIX` — object key prefix (default `vault`)
+- `DO_SPACES_PRESIGN_TTL_SEC` — presigned URL lifetime (default 4 hours)
 
-Auto-tag prefers audio from dropped local files; otherwise it fetches audio from the Dropbox link. Tags are constrained to your existing catalog vocabulary.
+Configure and test Spaces in **Admin → Storage**. The bucket should be **private**.
 
-#### Dropbox long-term access (refresh token)
+#### Migrating from Dropbox
 
-Dropbox no longer issues permanent generated tokens. Use a refresh token once:
+While legacy tracks still live in Dropbox, keep Dropbox OAuth env vars temporarily and run:
 
-1. Go to [Dropbox App Console](https://www.dropbox.com/developers/apps)
-2. Open (or create) a scoped app; enable: `files.metadata.read`, `sharing.read`, `sharing.write`
-3. Copy **App key** + **App secret** into `.env.local` as `DROPBOX_APP_KEY` / `DROPBOX_APP_SECRET`
-4. Run `npm run dropbox:oauth` — open the printed URL, approve, copy the `code`
-5. Run `npm run dropbox:oauth -- --exchange PASTE_CODE_HERE`
-6. Add the printed `DROPBOX_REFRESH_TOKEN` to `.env.local`
-7. Restart `npm run dev`
+```bash
+npm run spaces:migrate-from-dropbox -- --dry-run
+npm run spaces:migrate-from-dropbox
+npm run spaces:migrate-from-dropbox -- --track-id=RJV001
+```
 
-The app refreshes short-lived access tokens automatically. You can remove `DROPBOX_ACCESS_TOKEN` after this works.
+After migration, remove Dropbox credentials from `.env`.
 
-Drag files that are **already synced in Dropbox**. The app searches Dropbox by filename and fetches/creates the share link — it does **not** upload.
+Auto-tag prefers audio from dropped local files; otherwise it fetches from the vault (Spaces). Tags are constrained to your existing catalog vocabulary.
+
+Import: drag local MP3/WAV files — the app normalizes to −16 LUFS MP3 and uploads to Spaces.
 
 ## Scripts
 
@@ -72,11 +74,13 @@ Drag files that are **already synced in Dropbox**. The app searches Dropbox by f
 - `npm run seed` — upsert tracks from `SHEET_CSV_URL`
 - `npm run dev` — local development server
 - `npm run build && npm start` — production mode (ready for a subdomain)
+- `npm run spaces:migrate-from-dropbox` — one-time Dropbox → Spaces migration
 
 ## Features
 
 - Browse / search / filter by genre, mood, instrument, year, license
-- Persistent audio player (proxied Dropbox URLs)
-- Download + playlists
-- Admin import: paste links or drag existing Dropbox files to fetch share links, Gemini auto-tag, listen preview, import
+- Persistent audio player (presigned Spaces URLs via `/api/audio`)
+- Download + playlists (bulk download uses presigned batch URLs — no server zip)
+- Admin import: drag local files, Gemini auto-tag, listen preview, import
+- Track versions and stems stored alongside main mix in Spaces
 - Admin re-sync from Google Sheet (upsert by ID)

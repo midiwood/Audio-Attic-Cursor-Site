@@ -3,7 +3,7 @@
 import { AddToPlaylistButton } from "@/components/add-to-playlist-button";
 import { LicenseBadge } from "@/components/license-badge";
 import { usePlayer, type PlayerTrack } from "@/components/player-provider";
-import { audioFileTypeFromUrls, formatDisplayTitle } from "@/lib/tracks";
+import { audioFileTypeFromUrls, formatDisplayTitle, hasPlayableAudio } from "@/lib/tracks";
 import { isSamroSubmitted } from "@/lib/samro";
 import type { Track } from "@/db/schema";
 
@@ -16,9 +16,11 @@ export function TrackDetail({ track, queue }: { track: Track; queue: PlayerTrack
     subtitle: [track.client, track.project, track.year].filter(Boolean).join(" · ") || null,
     duration: track.duration,
     dropboxDl: track.dropboxDl,
+    dropboxPath: track.dropboxPath,
     license: track.license,
   };
   const active = current?.id === track.id && isPlaying;
+  const canPlay = hasPlayableAudio(track);
 
   const meta = [
     { label: "Working title", value: track.workingTitle },
@@ -60,13 +62,13 @@ export function TrackDetail({ track, queue }: { track: Track; queue: PlayerTrack
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <button
             type="button"
-            disabled={!track.dropboxDl}
+            disabled={!canPlay}
             onClick={() => playTrack(playerTrack, queue.length ? queue : [playerTrack])}
             className="rounded-lg bg-[var(--accent)] px-6 py-3 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {active ? "Playing" : "Play track"}
           </button>
-          {track.dropboxDl ? (
+          {canPlay ? (
             <a
               href={`/api/audio?id=${encodeURIComponent(track.id)}&download=1`}
               className="rounded-lg border border-[var(--line)] px-5 py-3 text-sm font-medium text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
@@ -75,16 +77,6 @@ export function TrackDetail({ track, queue }: { track: Track; queue: PlayerTrack
             </a>
           ) : null}
           <AddToPlaylistButton trackId={track.id} />
-          {track.dropboxLink ? (
-            <a
-              href={track.dropboxLink}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-[var(--line)] px-5 py-3 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
-            >
-              Open in Dropbox
-            </a>
-          ) : null}
           {track.sourceFolderLink ? (
             <a
               href={track.sourceFolderLink}

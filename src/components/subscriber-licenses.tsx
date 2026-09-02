@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { LicenseScopeChips } from "@/components/license-scope-fields";
 import { usePlayer, type PlayerTrack } from "@/components/player-provider";
 import { formatLicenseScopeSummary } from "@/lib/license-scope";
+import { hasPlayableAudio } from "@/lib/tracks";
 
 export type SubscriberLicenseRow = {
   id: string;
@@ -20,6 +21,7 @@ export type SubscriberLicenseRow = {
   status: string;
   createdAt: string;
   dropboxDl: string | null;
+  dropboxPath: string | null;
   trackDuration: string | null;
 };
 
@@ -84,6 +86,7 @@ function toPlayerTrack(row: SubscriberLicenseRow): PlayerTrack {
       formatLicenseScopeSummary(row) || row.intendedUse || row.trackDuration || null,
     duration: row.trackDuration,
     dropboxDl: row.dropboxDl,
+    dropboxPath: row.dropboxPath,
     license: null,
   };
 }
@@ -112,7 +115,7 @@ function LicenseSection({
       ) : null}
       <ul className="mt-3 space-y-2.5">
         {rows.map((row) => {
-          const canPlay = Boolean(row.dropboxDl);
+          const canPlay = hasPlayableAudio(row);
           const active = current?.id === row.trackId;
           const expanded = openId === row.id;
           const summary =
@@ -219,7 +222,7 @@ export function SubscriberLicenses({
   );
 
   const playQueue = useMemo(() => {
-    const playable = [...accepted, ...pending].filter((r) => r.dropboxDl);
+    const playable = [...accepted, ...pending].filter((r) => hasPlayableAudio(r));
     const seen = new Set<string>();
     const queue: PlayerTrack[] = [];
     for (const row of playable) {

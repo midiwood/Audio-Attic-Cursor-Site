@@ -7,7 +7,7 @@ import {
   readDurationFromAudioUrl,
 } from "@/lib/audio-duration";
 import type { TrackAssetKind } from "@/lib/track-assets";
-import { mp3OnlyErrorMessage, titleFromFilename } from "@/lib/tracks";
+import { hasPlayableAudio, mp3OnlyErrorMessage, titleFromFilename } from "@/lib/tracks";
 
 export type TrackAssetRow = {
   id: string;
@@ -29,6 +29,7 @@ type AssetListItem = {
   label: string;
   duration?: string | null;
   assetId: string;
+  dropboxPath?: string | null;
   dropboxDl?: string | null;
 };
 
@@ -101,7 +102,7 @@ function AssetRow({
   onDelete: (assetId: string) => void;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const playable = Boolean(item.assetId);
+  const playable = hasPlayableAudio({ dropboxPath: item.dropboxPath, dropboxDl: item.dropboxDl });
   const playerTrack = toPlayerTrack(trackId, item, trackTitle);
   const active = current?.id === trackId && current.assetId === item.assetId;
   const kindLabel = item.kind === "version" ? "Version" : "Stem";
@@ -233,6 +234,7 @@ export function TrackAssetsPanel({
           label: asset.label,
           duration: asset.duration,
           assetId: asset.id,
+          dropboxPath: asset.dropboxPath,
           dropboxDl: asset.dropboxDl,
         })),
     [assets],
@@ -248,6 +250,7 @@ export function TrackAssetsPanel({
           label: asset.label,
           duration: asset.duration,
           assetId: asset.id,
+          dropboxPath: asset.dropboxPath,
           dropboxDl: asset.dropboxDl,
         })),
     [assets],
@@ -293,7 +296,7 @@ export function TrackAssetsPanel({
       }
 
       const asset = data.asset as TrackAssetRow | undefined;
-      if (asset?.dropboxLink) {
+      if (asset?.dropboxPath) {
         const seconds = await readDurationFromAudioUrl(
           audioUrlFor(trackId, asset.id),
         );
