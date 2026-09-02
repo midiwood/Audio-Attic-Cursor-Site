@@ -132,13 +132,13 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           />
         </BrowseFiltersRail>
       </Suspense>
-      <main className="min-w-0 flex-1 px-5 py-6 md:px-8 md:py-8">
-        <header className="mb-6 border-b border-[var(--line)] pb-5">
-          <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight text-[var(--ink)] md:text-3xl">
+      <main className="min-w-0 flex-1 px-4 pt-4 md:px-8 md:py-8 lg:px-5 lg:py-6">
+        <header className="mb-4 border-b border-[var(--line)] pb-4 lg:mb-6 lg:pb-5">
+          <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight text-[var(--ink)] lg:text-3xl">
             Browse
             {prepareProMode ? <PrepareProInfo /> : null}
           </h1>
-          <p className="mt-1 text-sm text-[var(--ink-dim)]">
+          <p className="mt-1 hidden text-sm text-[var(--ink-dim)] lg:block">
             {prepareProMode
               ? "Licensed tracks not yet submitted to SAMRO — select Ready tracks (one publisher) to export a form."
               : subscriber

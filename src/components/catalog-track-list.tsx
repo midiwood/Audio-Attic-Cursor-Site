@@ -43,6 +43,7 @@ type PageResponse = {
 
 export function CatalogTrackList({
   filterQuery,
+  filterBasePath = "/",
   initialTracks,
   initialRelations,
   initialLicenseCounts,
@@ -59,6 +60,8 @@ export function CatalogTrackList({
 }: {
   /** Canonical filter query string (no limit/offset) — used as reset key + API params. */
   filterQuery: string;
+  /** Base path for sort/clear navigation (default browse). */
+  filterBasePath?: string;
   initialTracks: TrackListItem[];
   initialRelations: RelationsMap;
   initialLicenseCounts?: Record<string, number>;
@@ -120,18 +123,18 @@ export function CatalogTrackList({
       const query = next.toString();
       saveCatalogFilterQuery(query);
       startTransition(() => {
-        router.push(query ? `/?${query}` : "/");
+        router.push(query ? `${filterBasePath}?${query}` : filterBasePath);
       });
     },
-    [router, searchParams],
+    [filterBasePath, router, searchParams],
   );
 
   const handleClearFilters = useCallback(() => {
     clearCatalogFilterQuery();
     startTransition(() => {
-      router.push("/");
+      router.push(filterBasePath);
     });
-  }, [router]);
+  }, [filterBasePath, router]);
 
   // Reset when SSR seeds / filter query change
   useEffect(() => {

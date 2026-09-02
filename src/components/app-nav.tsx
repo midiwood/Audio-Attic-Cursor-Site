@@ -93,23 +93,6 @@ function IconAdmin({ className }: { className?: string }) {
   );
 }
 
-function IconMenu({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function IconClose({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** Temporary wordmark glyph until a logo option is chosen */
 function IconBrandMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -198,7 +181,6 @@ export function AppNav({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [mobileOpen, setMobileOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [browseHref, setBrowseHref] = useState("/");
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -321,18 +303,11 @@ export function AppNav({
     clearAudioPlayer();
     await authClient.signOut();
     setSigningOut(false);
-    setMobileOpen(false);
     router.push("/admin/login");
     router.refresh();
   }
 
-  function NavLinks({
-    onNavigate,
-    collapsed = false,
-  }: {
-    onNavigate?: () => void;
-    collapsed?: boolean;
-  }) {
+  function NavLinks({ collapsed = false }: { collapsed?: boolean }) {
     if (!items.length) return null;
     return (
       <nav className={`flex flex-col gap-0.5 ${collapsed ? "items-center px-1.5" : "px-2"}`}>
@@ -348,7 +323,6 @@ export function AppNav({
               title={collapsed ? item.label : undefined}
               onClick={() => {
                 setPendingHref(item.href);
-                onNavigate?.();
               }}
               className={navItemClass(active, clickPending, collapsed)}
               aria-busy={clickPending || undefined}
@@ -440,7 +414,7 @@ export function AppNav({
 
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="shrink-0 py-3">
-          <NavLinks onNavigate={() => setMobileOpen(false)} />
+          <NavLinks />
         </div>
 
         {showCollapse ? (
@@ -483,14 +457,12 @@ export function AppNav({
           <div className="space-y-1">
             <Link
               href="/signup"
-              onClick={() => setMobileOpen(false)}
               className="block rounded-lg bg-[var(--accent)] px-3 py-2.5 text-center text-sm font-medium text-white transition hover:brightness-110"
             >
               Sign up
             </Link>
             <Link
               href="/admin/login"
-              onClick={() => setMobileOpen(false)}
               className="block rounded-lg px-3 py-2 text-center text-sm text-[var(--ink-muted)] transition hover:bg-[rgba(255,255,255,0.04)] hover:text-[var(--ink)]"
             >
               Already have an account? Sign in
@@ -502,7 +474,6 @@ export function AppNav({
               href="/profile"
               onClick={() => {
                 setPendingHref("/profile");
-                setMobileOpen(false);
               }}
               className={`mb-1 flex items-center gap-3 rounded-lg px-2 py-2 transition ${
                 profileActive || pendingHref === "/profile"
@@ -604,56 +575,10 @@ export function AppNav({
   );
 
   return (
-    <>
-      {/* Mobile top bar */}
-      <div className="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--line)] bg-[rgba(11,20,32,0.92)] px-4 py-3 backdrop-blur-xl lg:hidden">
-        <span className="flex items-center gap-2 text-base font-semibold tracking-tight text-[var(--ink)]">
-          <span className="grid h-7 w-7 place-items-center rounded-full border border-[var(--line)] bg-[var(--bg-soft)]">
-            <IconBrandMark className="h-3.5 w-3.5" />
-          </span>
-          Audio Attic
-        </span>
-        <button
-          type="button"
-          onClick={() => setMobileOpen(true)}
-          className="rounded-lg border border-[var(--line)] p-2 text-[var(--ink-muted)] transition hover:text-[var(--ink)]"
-          aria-label="Open menu"
-        >
-          <IconMenu className="h-5 w-5" />
-        </button>
-      </div>
-
-      {/* Desktop primary sidebar */}
-      <aside
-        className="relative hidden w-[var(--nav-width)] shrink-0 flex-col border-r border-[var(--line)] bg-[rgba(9,15,24,0.92)] transition-[width] duration-200 ease-out lg:sticky lg:top-0 lg:flex lg:h-[100dvh]"
-      >
-        {navOpen ? expandedBody(true) : collapsedBody}
-      </aside>
-
-      {/* Mobile drawer — always full labels */}
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/55"
-            aria-label="Close menu"
-            onClick={() => setMobileOpen(false)}
-          />
-          <aside className="absolute inset-y-0 left-0 flex w-[min(18rem,88vw)] flex-col border-r border-[var(--line)] bg-[var(--bg-elevated)] shadow-2xl">
-            <div className="flex items-center justify-end border-b border-[var(--line)] px-3 py-3">
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                className="rounded-lg p-2 text-[var(--ink-muted)] hover:text-[var(--ink)]"
-                aria-label="Close menu"
-              >
-                <IconClose className="h-5 w-5" />
-              </button>
-            </div>
-            {expandedBody(false)}
-          </aside>
-        </div>
-      ) : null}
-    </>
+    <aside
+      className="relative hidden w-[var(--nav-width)] shrink-0 flex-col border-r border-[var(--line)] bg-[rgba(9,15,24,0.92)] transition-[width] duration-200 ease-out lg:sticky lg:top-0 lg:flex lg:h-[100dvh]"
+    >
+      {navOpen ? expandedBody(true) : collapsedBody}
+    </aside>
   );
 }

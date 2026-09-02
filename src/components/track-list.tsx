@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AddToPlaylistButton } from "@/components/add-to-playlist-button";
+import { TrackMobileMenu } from "@/components/track-mobile-menu";
 import { InlineTrackPanel } from "@/components/inline-track-panel";
 import type { ComposerOption } from "@/components/composer-picker";
 import { LicenseBadge } from "@/components/license-badge";
@@ -521,6 +522,15 @@ export function TrackList({
           const selected = selectedIds?.has(track.id) ?? false;
           const prepareHighlight = prepareProMode;
 
+          function handlePlay() {
+            if (!canPlay) return;
+            if (active) {
+              toggle();
+              return;
+            }
+            playTrack(toPlayerTrack(track, subscriberView), queue);
+          }
+
           return (
             <li
               key={track.id}
@@ -539,7 +549,7 @@ export function TrackList({
               }`}
             >
               <div
-                className={`grid ${mobileGridCols} items-center gap-3 px-3 py-3 xl:px-4 ${gridCols}`}
+                className={`grid ${mobileGridCols} items-center gap-3 px-3 py-2.5 lg:py-3 xl:px-4 ${gridCols}`}
               >
                 <div className="flex items-center gap-1">
                   {showSelection && onToggleSelect ? (
@@ -559,14 +569,7 @@ export function TrackList({
                   <button
                     type="button"
                     disabled={!canPlay}
-                    onClick={() => {
-                      if (!canPlay) return;
-                      if (active) {
-                        toggle();
-                        return;
-                      }
-                      playTrack(toPlayerTrack(track, subscriberView), queue);
-                    }}
+                    onClick={handlePlay}
                     className={`grid h-10 w-10 place-items-center rounded-full border text-sm transition disabled:cursor-not-allowed disabled:opacity-30 ${playButtonClass(active, isPlaying)}`}
                     aria-label={active && isPlaying ? `Pause ${title}` : `Play ${title}`}
                   >
@@ -577,30 +580,33 @@ export function TrackList({
                 <div className="min-w-0">
                   <button
                     type="button"
-                    onClick={() => toggleExpanded(track.id)}
-                    className="block w-full truncate text-left font-medium text-[var(--ink)] transition hover:text-[var(--accent)]"
-                    aria-expanded={expanded}
+                    disabled={!canPlay}
+                    onClick={handlePlay}
+                    className="block w-full text-left transition disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={active && isPlaying ? `Pause ${title}` : `Play ${title}`}
                   >
-                    {title}
-                  </button>
-                  <div className="mt-0.5 flex items-center gap-2">
-                    <div className="min-w-0 truncate text-xs text-[var(--ink-dim)]">
-                      {subtitle || "\u00a0"}
-                    </div>
-                    {!subscriberView && lineage.length ? (
-                      <span
-                        className="shrink-0 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--accent)]"
-                        title={
-                          lineage.length === 1
-                            ? "1 lineage link"
-                            : `${lineage.length} lineage links`
-                        }
-                      >
-                        Linked
+                    <span className="block truncate text-[15px] font-medium text-[var(--ink)] hover:text-[var(--accent)] lg:text-base">
+                      {title}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-2">
+                      <span className="min-w-0 truncate text-xs text-[var(--ink-dim)]">
+                        {subtitle || "\u00a0"}
                       </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 xl:hidden">
+                      {!subscriberView && lineage.length ? (
+                        <span
+                          className="shrink-0 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--accent)]"
+                          title={
+                            lineage.length === 1
+                              ? "1 lineage link"
+                              : `${lineage.length} lineage links`
+                          }
+                        >
+                          Linked
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                  <div className="hidden mt-2 flex-wrap items-center gap-2 xl:hidden">
                     {showSamro && readiness ? (
                       <SamroStatusChip
                         ready={readiness.ready}
@@ -682,7 +688,7 @@ export function TrackList({
                   </>
                 )}
 
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="hidden items-center justify-end gap-1.5 lg:flex">
                   {subscriberView ? (
                     <LicenseIconButton
                       userStatus={userLicenseByTrack[track.id]?.status}
@@ -723,6 +729,17 @@ export function TrackList({
                     {expanded ? "▴" : "▾"}
                   </button>
                 </div>
+
+                <TrackMobileMenu
+                  trackTitle={title}
+                  trackId={track.id}
+                  showAddToPlaylist={showAddToPlaylist}
+                  onRemoveFromPlaylist={
+                    showRemoveFromPlaylist ? () => showRemoveFromPlaylist(track.id) : undefined
+                  }
+                  expanded={expanded}
+                  onTrackInfo={() => toggleExpanded(track.id)}
+                />
               </div>
 
               {expanded ? (
