@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession, isSubscriber } from "@/lib/auth";
-import { resolveAudioRedirectUrl } from "@/lib/audio-access";
-import {
-  ensureWatermarkedObject,
-  formatEvalDownloadLabel,
-  shouldWatermarkDownload,
-  WatermarkBusyError,
-} from "@/lib/audio-watermark";
+import { resolveAudioRedirectUrl, resolvePlayableObjectKey } from "@/lib/audio-access";
 import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { getTrackById } from "@/lib/queries";
 import { formatAudioDownloadLabel } from "@/lib/tracks";
 import { isSubscriberVisible } from "@/lib/publisher";
-import { isSpacesObjectKey } from "@/lib/storage/paths";
 import { getTrackAssetForTrack } from "@/lib/track-assets";
 
 export const runtime = "nodejs";
@@ -58,20 +51,12 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  if (download && shouldWatermarkDownload(session)) {
-    const sourceKey = objectKey?.trim() || "";
-    if (isSpacesObjectKey(sourceKey)) {
-      try {
-        objectKey = await ensureWatermarkedObject(id, sourceKey);
-        downloadLabel = formatEvalDownloadLabel(downloadLabel);
-      } catch (err) {
-        if (err instanceof WatermarkBusyError) {
-          return NextResponse.json({ error: err.message }, { status: 503 });
-        }
-        const message = err instanceof Error ? err.message : "Watermark failed";
-        console.error("[audio GET watermark]", message, err);
-        return NextResponse.json({ error: message }, { status: 502 });
-      }
+  // Main track only: if DB still has a Dropbox absolute path, prefer vault/{id}/track.mp3 when present.
+  if (!assetId) {
+    const resolved = await resolvePlayableObjectKey({ trackId: id, objectKey });
+    if (resolved.key) {
+      objectKey = resolved.key;
+      if (resolved.healed) legacyDlUrl = null;
     }
   }
 

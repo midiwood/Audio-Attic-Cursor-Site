@@ -1,6 +1,6 @@
 /**
  * Build a zip of catalog audio for playlist / bulk download.
- * Watermark subscriber/guest copies first, zip, then presign from Spaces.
+ * Zip in memory, upload to Spaces, return a presigned URL.
  */
 
 import "server-only";
@@ -16,11 +16,6 @@ import {
   safeAudioFilename,
   uniqueZipEntryName,
 } from "@/lib/audio-download-shared";
-import {
-  ensureWatermarkedObject,
-  formatEvalDownloadLabel,
-  shouldWatermarkDownload,
-} from "@/lib/audio-watermark";
 import { GUEST_PLAYLIST_COOKIE } from "@/lib/guest-playlist";
 import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { isSubscriberVisible } from "@/lib/publisher";
@@ -40,8 +35,6 @@ export type ZipAudioEntry = {
   objectKey: string;
   filename: string;
 };
-
-const WATERMARK_BUDGET_MS = 240_000;
 
 function entryFilename(label: string, objectKey: string) {
   const ext = objectKey.toLowerCase().endsWith(".wav") ? "wav" : "mp3";
@@ -121,8 +114,6 @@ export async function resolveZipAudioEntries(input: {
     });
   }
 
-  const watermark = shouldWatermarkDownload(input.session);
-  const deadline = Date.now() + WATERMARK_BUDGET_MS;
   const usedNames = new Set<string>();
   const entries: ZipAudioEntry[] = [];
 
@@ -130,22 +121,10 @@ export async function resolveZipAudioEntries(input: {
     const sourceKey = track.dropboxPath?.trim() || "";
     if (!isSpacesObjectKey(sourceKey)) continue;
 
-    let objectKey = sourceKey;
-    let label = formatAudioDownloadLabel(track);
-    if (watermark) {
-      if (Date.now() > deadline) {
-        throw Object.assign(
-          new Error("Watermarked download is being prepared. Try again in a moment."),
-          { status: 503 },
-        );
-      }
-      objectKey = await ensureWatermarkedObject(track.id, sourceKey);
-      label = formatEvalDownloadLabel(label);
-    }
-
+    const label = formatAudioDownloadLabel(track);
     entries.push({
-      objectKey,
-      filename: uniqueZipEntryName(entryFilename(label, objectKey), usedNames),
+      objectKey: sourceKey,
+      filename: uniqueZipEntryName(entryFilename(label, sourceKey), usedNames),
     });
   }
 
@@ -153,10 +132,9 @@ export async function resolveZipAudioEntries(input: {
     throw Object.assign(new Error("No downloadable tracks found"), { status: 404 });
   }
 
-  const zipLabel = watermark ? formatEvalDownloadLabel(zipBaseName) : zipBaseName;
   return {
     entries,
-    zipFilename: `${safeAudioFilename(zipLabel)}.zip`,
+    zipFilename: `${safeAudioFilename(zipBaseName)}.zip`,
   };
 }
 

@@ -328,7 +328,9 @@ export async function presignGetUrl(key: string, opts?: PresignGetOptions): Prom
   const expiresIn = opts?.expiresInSec ?? runtime.presignTtlSec;
   let url = await getSignedUrl(client, command, { expiresIn });
 
-  if (runtime.cdnEndpoint) {
+  // DigitalOcean CDN often strips ResponseContentDisposition; keep origin for downloads.
+  const skipCdnForDownload = Boolean(opts?.downloadFilename);
+  if (runtime.cdnEndpoint && !skipCdnForDownload) {
     try {
       const parsed = new URL(url);
       const cdn = new URL(runtime.cdnEndpoint);

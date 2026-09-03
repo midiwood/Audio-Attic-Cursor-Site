@@ -1,5 +1,10 @@
 import "server-only";
 
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { tracks } from "@/db/schema";
+import { headObject } from "@/lib/storage/spaces";
+import { vaultTrackMp3Key } from "@/lib/storage/paths";
 import { isSpacesObjectKey, presignGetUrl, spacesConfigured } from "@/lib/vault-storage";
 
 function safeFilename(name: string) {
@@ -13,93 +18,61 @@ export type AudioRedirectInput = {
   downloadLabel?: string;
 };
 
-export type AudioRedirectDebug = {
-  spacesConfigured: boolean;
-  keyPresent: boolean;
-  keyIsSpaces: boolean;
-  usedLegacy: boolean;
-  hasLegacy: boolean;
-  keyPrefix: string;
-};
+/**
+ * Prefer a Spaces vault key. If the DB still has a legacy Dropbox absolute path
+ * but `vault/{trackId}/track.mp3` already exists in the bucket, heal the row and
+ * return the vault key (same bucket as local after migration).
+ */
+export async function resolvePlayableObjectKey(opts: {
+  trackId: string;
+  objectKey?: string | null;
+}): Promise<{ key: string | null; healed: boolean }> {
+  const raw = opts.objectKey?.trim() || "";
+  if (raw && isSpacesObjectKey(raw)) {
+    return { key: raw, healed: false };
+  }
+  if (!spacesConfigured()) {
+    return { key: null, healed: false };
+  }
+  const trackId = opts.trackId.trim();
+  if (!trackId) return { key: null, healed: false };
 
-/** Resolve a redirect URL for playback/download without proxying bytes through cPanel. */
-export async function resolveAudioRedirectUrl(
-  input: AudioRedirectInput,
-  debugOut?: AudioRedirectDebug,
-): Promise<string | null> {
-  const key = input.objectKey?.trim() || "";
-  const legacy = input.legacyDlUrl?.trim() || "";
-  const keyIsSpaces = Boolean(key && isSpacesObjectKey(key));
-  const configured = spacesConfigured();
-
-  if (debugOut) {
-    debugOut.spacesConfigured = configured;
-    debugOut.keyPresent = Boolean(key);
-    debugOut.keyIsSpaces = keyIsSpaces;
-    debugOut.hasLegacy = Boolean(legacy);
-    debugOut.keyPrefix = key.includes("/") ? key.split("/").slice(0, 2).join("/") : key.slice(0, 24);
-    debugOut.usedLegacy = false;
+  const canonical = vaultTrackMp3Key(trackId);
+  const head = await headObject(canonical);
+  if (!head.exists) {
+    return { key: null, healed: false };
   }
 
-  if (keyIsSpaces) {
-    if (!configured) return null;
+  try {
+    db.update(tracks)
+      .set({
+        dropboxPath: canonical,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(tracks.id, trackId))
+      .run();
+  } catch {
+    // Best-effort heal; still serve the vault object this request.
+  }
+
+  return { key: canonical, healed: true };
+}
+
+/** Resolve a redirect URL for playback/download without proxying bytes through cPanel. */
+export async function resolveAudioRedirectUrl(input: AudioRedirectInput): Promise<string | null> {
+  const key = input.objectKey?.trim() || "";
+  const legacy = input.legacyDlUrl?.trim() || "";
+
+  if (key && isSpacesObjectKey(key)) {
+    if (!spacesConfigured()) return null;
     const ext = key.toLowerCase().endsWith(".wav") ? "wav" : "mp3";
     const downloadFilename =
       input.download && input.downloadLabel
         ? `${safeFilename(input.downloadLabel)}.${ext}`
         : undefined;
-    const url = await presignGetUrl(key, { downloadFilename });
-    // #region agent log
-    fetch("http://127.0.0.1:7612/ingest/5cddcac2-af09-42bd-9712-68bde244498e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "e9662a" },
-      body: JSON.stringify({
-        sessionId: "e9662a",
-        runId: "pre-fix",
-        hypothesisId: "B",
-        location: "audio-access.ts:presign",
-        message: "download filename decision",
-        data: {
-          download: Boolean(input.download),
-          hasLabel: Boolean(input.downloadLabel),
-          filenameSet: Boolean(downloadFilename),
-          filenameLen: downloadFilename?.length || 0,
-          filenameHasSpace: Boolean(downloadFilename?.includes(" ")),
-          keyTail: key.split("/").pop() || "",
-          spacesConfigured: configured,
-          keyIsSpaces,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return url;
+    return presignGetUrl(key, { downloadFilename });
   }
 
-  if (legacy) {
-    if (debugOut) debugOut.usedLegacy = true;
-    // #region agent log
-    fetch("http://127.0.0.1:7612/ingest/5cddcac2-af09-42bd-9712-68bde244498e", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "e9662a" },
-      body: JSON.stringify({
-        sessionId: "e9662a",
-        runId: "pre-fix",
-        hypothesisId: "D",
-        location: "audio-access.ts:legacy",
-        message: "fell back to legacy dropboxDl",
-        data: {
-          spacesConfigured: configured,
-          keyPresent: Boolean(key),
-          keyIsSpaces,
-          keyPrefix: key.includes("/") ? key.split("/").slice(0, 2).join("/") : key.slice(0, 24),
-          hasLegacy: true,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-    return legacy;
-  }
+  if (legacy) return legacy;
   return null;
 }

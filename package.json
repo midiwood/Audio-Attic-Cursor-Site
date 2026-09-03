@@ -19,7 +19,8 @@
     "seed": "tsx scripts/seed-from-sheet.ts",
     "dropbox:oauth": "node scripts/dropbox-oauth.mjs",
     "dropbox:vault-migrate": "tsx scripts/migrate-to-vault.ts",
-    "spaces:migrate-from-dropbox": "tsx scripts/migrate-dropbox-to-spaces.ts"
+    "spaces:migrate-from-dropbox": "tsx scripts/migrate-dropbox-to-spaces.ts",
+    "spaces:warm-watermarks": "tsx scripts/warm-watermarks.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1124.0",

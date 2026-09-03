@@ -115,7 +115,7 @@ const GRID_COLS =
 const GRID_COLS_WITH_SAMRO =
   "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_64px_56px_88px_56px_100px_130px]";
 const GRID_COLS_SUBSCRIBER =
-  "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_64px_56px_88px_130px]";
+  "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_56px_130px]";
 /** Prepare PRO: title → status → year → added → actions (no genre/BPM). */
 const GRID_COLS_PREPARE =
   "xl:grid-cols-[72px_minmax(0,1.6fr)_minmax(220px,auto)_64px_88px_130px]";
@@ -473,13 +473,15 @@ export function TrackList({
         />
         {prepareProMode ? <span>Status</span> : null}
         {prepareProMode ? null : <span>Genre / Mood</span>}
-        <SortHeader
-          label="Year"
-          sortKey="year"
-          activeSort={sort}
-          activeDir={sortDir}
-          onSort={onSortChange ? handleSortClick : undefined}
-        />
+        {subscriberView ? null : (
+          <SortHeader
+            label="Year"
+            sortKey="year"
+            activeSort={sort}
+            activeDir={sortDir}
+            onSort={onSortChange ? handleSortClick : undefined}
+          />
+        )}
         {prepareProMode ? null : (
           <SortHeader
             label="BPM"
@@ -489,13 +491,15 @@ export function TrackList({
             onSort={onSortChange ? handleSortClick : undefined}
           />
         )}
-        <SortHeader
-          label="Added"
-          sortKey="date"
-          activeSort={sort}
-          activeDir={sortDir}
-          onSort={onSortChange ? handleSortClick : undefined}
-        />
+        {subscriberView ? null : (
+          <SortHeader
+            label="Added"
+            sortKey="date"
+            activeSort={sort}
+            activeDir={sortDir}
+            onSort={onSortChange ? handleSortClick : undefined}
+          />
+        )}
         {prepareProMode ? null : (
           <>
             {showSamro ? <span>SAMRO</span> : null}
@@ -635,11 +639,15 @@ export function TrackList({
                       )
                     ) : null}
                     {subscriberView ? null : <LicenseBadge license={track.license} />}
-                    {track.year ? <span className="text-xs text-[var(--ink-dim)]">{track.year}</span> : null}
+                    {subscriberView ? null : track.year ? (
+                      <span className="text-xs text-[var(--ink-dim)]">{track.year}</span>
+                    ) : null}
                     {!prepareProMode && track.bpm ? (
                       <span className="text-xs text-[var(--ink-dim)]">{track.bpm} BPM</span>
                     ) : null}
-                    <span className="text-xs text-[var(--ink-dim)]">{formatAddedDate(track)}</span>
+                    {subscriberView ? null : (
+                      <span className="text-xs text-[var(--ink-dim)]">{formatAddedDate(track)}</span>
+                    )}
                     {!prepareProMode && track.musicalKey ? (
                       <span className="text-xs text-[var(--ink-dim)]">{track.musicalKey}</span>
                     ) : null}
@@ -663,20 +671,24 @@ export function TrackList({
                     <div className="truncate text-xs text-[var(--ink-dim)]">{track.mood || ""}</div>
                   </div>
                 )}
-                <div className="hidden text-sm tabular-nums text-[var(--ink-muted)] xl:block">
-                  {track.year || "—"}
-                </div>
+                {subscriberView ? null : (
+                  <div className="hidden text-sm tabular-nums text-[var(--ink-muted)] xl:block">
+                    {track.year || "—"}
+                  </div>
+                )}
                 {prepareProMode ? null : (
                   <div className="hidden text-sm tabular-nums text-[var(--ink-muted)] xl:block">
                     {track.bpm || "—"}
                   </div>
                 )}
-                <div
-                  className="hidden text-xs tabular-nums text-[var(--ink-dim)] xl:block"
-                  title={track.date || track.createdAt || undefined}
-                >
-                  {formatAddedDate(track)}
-                </div>
+                {subscriberView ? null : (
+                  <div
+                    className="hidden text-xs tabular-nums text-[var(--ink-dim)] xl:block"
+                    title={track.date || track.createdAt || undefined}
+                  >
+                    {formatAddedDate(track)}
+                  </div>
+                )}
                 {prepareProMode ? null : (
                   <>
                     {showSamro ? (
