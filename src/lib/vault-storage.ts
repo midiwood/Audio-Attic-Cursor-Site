@@ -28,6 +28,7 @@ export {
   vaultStemMp3Key,
   vaultTrackMp3Key,
   vaultVersionMp3Key,
+  vaultWatermarkedMp3Key,
   vaultStagingFolderKey,
 } from "@/lib/storage/paths";
 

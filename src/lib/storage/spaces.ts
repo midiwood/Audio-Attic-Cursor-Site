@@ -5,6 +5,7 @@ export {
   copyObject,
   deleteObject,
   getObjectBuffer,
+  headObject,
   presignGetUrl,
   spacesConfigured,
   spacesSetupMessage,

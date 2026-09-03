@@ -15,6 +15,8 @@ import {
 import { PlaylistPickModal } from "@/components/playlist-pick-modal";
 import {
   addTrackToCurrentPlaylist,
+  getLastPlaylist,
+  hasChosenPlaylistThisSession,
   listPlaylistsForPicker,
   type PlaylistOption,
 } from "@/lib/last-playlist";
@@ -597,6 +599,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (current.preview) return;
         e.preventDefault();
         const trackId = current.id;
+        if (!hasChosenPlaylistThisSession() || !getLastPlaylist()) {
+          openPlaylistPicker(trackId);
+          return;
+        }
         void addTrackToCurrentPlaylist(trackId).then((result) => {
           if (result.needsPick) {
             setPickTrackId(trackId);

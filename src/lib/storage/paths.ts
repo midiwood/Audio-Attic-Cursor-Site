@@ -35,6 +35,25 @@ export function vaultStemMp3Key(trackId: string, slug: string): string {
   return `${vaultPrefix()}/${id}/stems/${key}.mp3`;
 }
 
+/** Cached subscriber/guest eval mix. versionToken includes clip hash + source ETag. */
+export function vaultWatermarkedMp3Key(
+  trackId: string,
+  sourceKeyToken: string,
+  versionToken: string,
+): string {
+  const id = trackId.trim();
+  const source = sourceKeyToken.replace(/[^a-zA-Z0-9._-]+/g, "").slice(0, 32);
+  const ver = versionToken.replace(/[^a-zA-Z0-9._-]+/g, "").slice(0, 80);
+  if (!id || !source || !ver) throw new Error("watermark cache key is incomplete");
+  return `${vaultPrefix()}/watermarked/${id}/${source}/${ver}.mp3`;
+}
+
+export function vaultTempZipKey(token: string): string {
+  const id = token.replace(/[^a-zA-Z0-9._-]+/g, "").slice(0, 80);
+  if (!id) throw new Error("zip token is required");
+  return `${vaultPrefix()}/zips/_tmp/${id}.zip`;
+}
+
 export function isVaultStagingKey(key: string | null | undefined): boolean {
   const normalized = String(key || "").replace(/\\/g, "/");
   const prefix = vaultPrefix().toLowerCase();

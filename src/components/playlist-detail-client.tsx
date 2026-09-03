@@ -94,11 +94,16 @@ export function PlaylistDetailClient({
     if (!queue.length || downloadBusy) return;
     setDownloadBusy(true);
     setDownloadError("");
-    const result = await downloadTracksZip({
-      trackIds: tracks.filter((t) => hasPlayableAudio(t)).map((t) => t.id),
-    });
-    setDownloadBusy(false);
-    if (!result.ok) setDownloadError(result.error);
+    try {
+      const result = await downloadTracksZip({
+        playlistId,
+      });
+      if (!result.ok) setDownloadError(result.error);
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Download failed");
+    } finally {
+      setDownloadBusy(false);
+    }
   }
 
   const selectedTracks = useMemo(

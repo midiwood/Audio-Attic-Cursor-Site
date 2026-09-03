@@ -3,9 +3,16 @@ import { cookies } from "next/headers";
 import { getApiSession, isSubscriber } from "@/lib/auth";
 import { resolveAudioRedirectUrl } from "@/lib/audio-access";
 import { MAX_ZIP_TRACKS } from "@/lib/audio-download-shared";
+import {
+  ensureWatermarkedObject,
+  formatEvalDownloadLabel,
+  shouldWatermarkDownload,
+  WatermarkBusyError,
+} from "@/lib/audio-watermark";
 import { GUEST_PLAYLIST_COOKIE } from "@/lib/guest-playlist";
 import { formatAudioDownloadLabel } from "@/lib/tracks";
 import { isSubscriberVisible } from "@/lib/publisher";
+import { isSpacesObjectKey } from "@/lib/storage/paths";
 import {
   getPlaylistByGuestToken,
   playlistContainsTrack,
@@ -13,6 +20,7 @@ import {
 import { getTrackById } from "@/lib/queries";
 
 export const runtime = "nodejs";
+export const maxDuration = 180;
 
 function safeFilename(name: string) {
   return name.replace(/[^\w.\- ()[\]]+/g, "_").slice(0, 120) || "track";
@@ -26,6 +34,8 @@ async function guestMayAccessTrack(trackId: string): Promise<boolean> {
   if (!playlist) return false;
   return playlistContainsTrack(playlist.id, trackId);
 }
+
+const BATCH_WATERMARK_BUDGET_MS = 100_000;
 
 /** Return presigned download URLs — browser fetches directly from Spaces. */
 export async function POST(req: NextRequest) {
@@ -46,6 +56,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const watermark = shouldWatermarkDownload(session);
+  const deadline = Date.now() + BATCH_WATERMARK_BUDGET_MS;
   const downloads: Array<{ trackId: string; url: string; filename: string }> = [];
 
   for (const id of trackIds) {
@@ -57,10 +69,33 @@ export async function POST(req: NextRequest) {
     if (!track) continue;
     if (session && isSubscriber(session) && !isSubscriberVisible(track)) continue;
 
-    const label = formatAudioDownloadLabel(track);
-    const ext = track.dropboxPath?.toLowerCase().endsWith(".wav") ? "wav" : "mp3";
+    let objectKey = track.dropboxPath;
+    let label = formatAudioDownloadLabel(track);
+
+    const sourceKey = objectKey?.trim() || "";
+    if (watermark && isSpacesObjectKey(sourceKey)) {
+      if (Date.now() > deadline) {
+        return NextResponse.json(
+          { error: "Watermarked download is being prepared. Try again in a moment." },
+          { status: 503 },
+        );
+      }
+      try {
+        objectKey = await ensureWatermarkedObject(id, sourceKey);
+        label = formatEvalDownloadLabel(label);
+      } catch (err) {
+        if (err instanceof WatermarkBusyError) {
+          return NextResponse.json({ error: err.message }, { status: 503 });
+        }
+        const message = err instanceof Error ? err.message : "Watermark failed";
+        console.error("[audio/presign-batch watermark]", id, message, err);
+        return NextResponse.json({ error: message }, { status: 502 });
+      }
+    }
+
+    const ext = objectKey?.toLowerCase().endsWith(".wav") ? "wav" : "mp3";
     const url = await resolveAudioRedirectUrl({
-      objectKey: track.dropboxPath,
+      objectKey,
       legacyDlUrl: track.dropboxDl,
       download: true,
       downloadLabel: label,

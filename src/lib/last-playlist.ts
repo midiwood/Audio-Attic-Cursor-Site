@@ -83,9 +83,6 @@ async function promptPlaylistPick(): Promise<{
   error?: string;
 }> {
   const playlists = await listPlaylistsForPicker();
-  if (!playlists.length) {
-    return { ok: false, error: "No playlist yet — press L to create one" };
-  }
   return { ok: false, needsPick: true, playlists };
 }
 
@@ -132,19 +129,13 @@ export async function addTrackToCurrentPlaylist(trackId: string): Promise<{
   const stillMine = playlists.some((p) => p.id === last.id);
   if (!stillMine) {
     clearLastPlaylist();
-    if (!playlists.length) {
-      return { ok: false, error: "No playlist yet — press L to create one" };
-    }
     return { ok: false, needsPick: true, playlists };
   }
 
   const result = await addTrackToPlaylistId(trackId, last);
   if (!result.ok) {
     clearLastPlaylist();
-    if (playlists.length) {
-      return { ok: false, needsPick: true, playlists };
-    }
-    return result;
+    return { ok: false, needsPick: true, playlists };
   }
   return result;
 }

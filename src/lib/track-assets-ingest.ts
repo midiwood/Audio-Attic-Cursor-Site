@@ -1,4 +1,5 @@
 import { normalizeToMinus16LufsMp3, transcodeToPlaybackMp3 } from "@/lib/audio-normalize";
+import { warmWatermarkedObject } from "@/lib/audio-watermark";
 import type { TrackAssetKind } from "@/lib/track-assets";
 import {
   deleteVaultFile,
@@ -40,7 +41,9 @@ export async function ingestTrackAsset(input: IngestTrackAssetInput): Promise<In
       ? vaultVersionMp3Key(trackId, slug)
       : vaultStemMp3Key(trackId, slug);
 
-  return uploadVaultAudioFile(objectKey, mp3Bytes);
+  const uploaded = await uploadVaultAudioFile(objectKey, mp3Bytes);
+  warmWatermarkedObject(trackId, uploaded.dropboxPath);
+  return uploaded;
 }
 
 export async function removeTrackAssetFile(dropboxPath: string | null | undefined): Promise<void> {

@@ -1,13 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getApiSession, isSubscriber } from "@/lib/auth";
 import { resolveAudioRedirectUrl } from "@/lib/audio-access";
+import {
+  ensureWatermarkedObject,
+  formatEvalDownloadLabel,
+  shouldWatermarkDownload,
+  WatermarkBusyError,
+} from "@/lib/audio-watermark";
 import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { getTrackById } from "@/lib/queries";
 import { formatAudioDownloadLabel } from "@/lib/tracks";
 import { isSubscriberVisible } from "@/lib/publisher";
+import { isSpacesObjectKey } from "@/lib/storage/paths";
 import { getTrackAssetForTrack } from "@/lib/track-assets";
 
 export const runtime = "nodejs";
+export const maxDuration = 180;
 
 export async function GET(req: NextRequest) {
   const session = await getApiSession();
@@ -48,6 +56,23 @@ export async function GET(req: NextRequest) {
       asset.label,
       asset.kind === "stem" || asset.kind === "version" ? asset.kind : null,
     );
+  }
+
+  if (download && shouldWatermarkDownload(session)) {
+    const sourceKey = objectKey?.trim() || "";
+    if (isSpacesObjectKey(sourceKey)) {
+      try {
+        objectKey = await ensureWatermarkedObject(id, sourceKey);
+        downloadLabel = formatEvalDownloadLabel(downloadLabel);
+      } catch (err) {
+        if (err instanceof WatermarkBusyError) {
+          return NextResponse.json({ error: err.message }, { status: 503 });
+        }
+        const message = err instanceof Error ? err.message : "Watermark failed";
+        console.error("[audio GET watermark]", message, err);
+        return NextResponse.json({ error: message }, { status: 502 });
+      }
+    }
   }
 
   const redirectUrl = await resolveAudioRedirectUrl({

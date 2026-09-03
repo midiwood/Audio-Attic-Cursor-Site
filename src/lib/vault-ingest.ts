@@ -6,6 +6,7 @@
 
 import { randomBytes } from "crypto";
 import { normalizeToMinus16LufsMp3 } from "@/lib/audio-normalize";
+import { warmWatermarkedObject } from "@/lib/audio-watermark";
 import {
   isVaultStagingKey,
   promoteVaultStaging,
@@ -95,13 +96,15 @@ export async function finalizeVaultForTrack(input: {
       stagingPath: stagingPath || null,
       trackId,
     });
-    return {
+    const result = {
       dropboxPath: promoted.dropboxPath,
       dropboxLink: promoted.dropboxLink,
       dropboxDl: promoted.dropboxDl,
       sourceDropboxPath: input.sourceDropboxPath?.trim() || null,
       sourceFolderLink: input.sourceFolderLink?.trim() || null,
     };
+    warmWatermarkedObject(trackId, result.dropboxPath);
+    return result;
   }
 
   if (input.dropboxPath?.trim() && !isVaultStagingKey(input.dropboxPath)) {
@@ -128,6 +131,8 @@ export async function ingestTrackToVault(input: VaultIngestInput): Promise<Vault
   const resolved = await resolveSourceBytes(input);
   const mp3Bytes = await normalizeToMinus16LufsMp3(resolved.sourceBytes, resolved.hint);
   const uploaded = await uploadIntoVault({ trackId, mp3Bytes });
+
+  warmWatermarkedObject(trackId, uploaded.dropboxPath);
 
   return {
     dropboxPath: uploaded.dropboxPath,

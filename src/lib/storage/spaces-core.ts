@@ -2,6 +2,7 @@ import {
   CopyObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
@@ -261,6 +262,32 @@ export async function copyObject(fromKey: string, toKey: string): Promise<void> 
       ContentType: "audio/mpeg",
     }),
   );
+}
+
+export async function headObject(
+  key: string,
+): Promise<{ exists: boolean; etag: string | null }> {
+  const normalized = key.trim();
+  if (!normalized) return { exists: false, etag: null };
+  try {
+    const runtime = getSpacesRuntimeConfig();
+    const client = getClient();
+    const res = await client.send(
+      new HeadObjectCommand({
+        Bucket: runtime.bucket,
+        Key: normalized,
+      }),
+    );
+    const etag = String(res.ETag || "").replace(/"/g, "").trim();
+    return { exists: true, etag: etag || null };
+  } catch (err) {
+    const status = httpStatus(err);
+    const name = err && typeof err === "object" ? String((err as { name?: string }).name || "") : "";
+    if (status === 404 || name === "NotFound" || name === "NoSuchKey") {
+      return { exists: false, etag: null };
+    }
+    throw err;
+  }
 }
 
 export async function getObjectBuffer(key: string): Promise<Buffer> {
