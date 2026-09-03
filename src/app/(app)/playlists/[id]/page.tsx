@@ -67,7 +67,8 @@ export default async function PlaylistPage({
       : undefined;
 
   return (
-    <main className="min-w-0 flex-1 px-5 py-6 md:px-8 md:py-8">
+    <main className="min-w-0 flex-1 py-6">
+      <div className="px-5 md:px-8">
       <Link
         href="/playlists"
         className="mb-4 inline-flex text-sm text-[var(--ink-dim)] transition hover:text-[var(--accent)]"
@@ -80,6 +81,7 @@ export default async function PlaylistPage({
         canRename={isOwner}
         subtitle={!isOwner ? "Shared with you" : undefined}
       />
+      </div>
       <PlaylistDetailClient
         playlistId={playlist!.id}
         playlistName={playlist!.name}

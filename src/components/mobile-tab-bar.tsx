@@ -130,7 +130,7 @@ export function MobileTabBar({
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--line)] bg-[rgba(8,14,22,0.96)] pb-[env(safe-area-inset-bottom,0px)] backdrop-blur-xl lg:hidden"
+      className="fixed inset-x-0 top-0 z-40 border-b border-[var(--line)] bg-[rgba(8,14,22,0.96)] pt-[env(safe-area-inset-top,0px)] backdrop-blur-xl lg:hidden"
       aria-label="Main"
     >
       <ul className="mx-auto flex max-w-lg items-stretch justify-around px-1">

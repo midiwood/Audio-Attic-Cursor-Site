@@ -33,7 +33,7 @@ export async function AppShell({
   const pendingUserCount = siteAdmin ? countPendingApprovals() : 0;
 
   return (
-    <div className="flex min-h-[100dvh] flex-col lg:flex-row">
+    <div className="flex h-full min-h-0 flex-col lg:h-auto lg:min-h-[100dvh] lg:flex-row">
       <Suspense fallback={<NavFallback />}>
         <AppNav
           mode={mode}
@@ -47,7 +47,7 @@ export async function AppShell({
           pendingUserCount={pendingUserCount}
         />
       </Suspense>
-      <div className="flex min-w-0 flex-1 flex-col pb-[var(--mobile-chrome-bottom)] lg:flex-row lg:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col pt-[var(--mobile-chrome-top)] pb-[var(--mobile-chrome-bottom)] lg:flex-row lg:pt-0 lg:pb-[var(--bottom-player-height,0px)]">
         {children}
       </div>
       {!isGuest ? (

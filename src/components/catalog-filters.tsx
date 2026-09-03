@@ -158,6 +158,7 @@ export function CatalogFilters({
   matchCount,
   hideLicenseFilter = false,
   showSamroFilter = false,
+  showYearFilter = false,
 }: {
   options: Options;
   available: Available;
@@ -166,6 +167,8 @@ export function CatalogFilters({
   hideLicenseFilter?: boolean;
   /** Staff-only: filter by SAMRO PRO submission. */
   showSamroFilter?: boolean;
+  /** Staff-only: filter by year. */
+  showYearFilter?: boolean;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -247,12 +250,13 @@ export function CatalogFilters({
       moodValues.length > 0 ||
       instrumentValues.length > 0 ||
       usageValues.length > 0 ||
-      Boolean(yearValue)
+      Boolean(showYearFilter && yearValue)
     );
   }, [
     params,
     hideLicenseFilter,
     showSamroFilter,
+    showYearFilter,
     licenseValue,
     samroValue,
     genreValues,
@@ -558,6 +562,7 @@ export function CatalogFilters({
               </FilterRow>
             ) : null}
 
+            {showYearFilter ? (
             <FilterRow label="Year">
               <select
                 className={`catalog-filter-select ${fieldClass}`}
@@ -579,6 +584,7 @@ export function CatalogFilters({
                 })}
               </select>
             </FilterRow>
+            ) : null}
 
             <FilterRow label="Genre" tone="genre">
             <MultiFacetField

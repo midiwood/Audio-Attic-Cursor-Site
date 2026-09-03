@@ -366,7 +366,7 @@ export function AppNav({
   }
 
   const expandedBody = (showCollapse: boolean) => (
-    <>
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <div className="border-b border-[var(--line)] px-4 py-4">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -452,7 +452,7 @@ export function AppNav({
         )}
       </div>
 
-      <div className="border-t border-[var(--line)] p-3">
+      <div className="mt-auto shrink-0 border-t border-[var(--line)] p-3">
         {isGuest ? (
           <div className="space-y-1">
             <Link
@@ -516,7 +516,7 @@ export function AppNav({
           </>
         )}
       </div>
-    </>
+    </div>
   );
 
   const collapsedBody = (
@@ -576,7 +576,7 @@ export function AppNav({
 
   return (
     <aside
-      className="relative hidden w-[var(--nav-width)] shrink-0 flex-col border-r border-[var(--line)] bg-[rgba(9,15,24,0.92)] transition-[width] duration-200 ease-out lg:sticky lg:top-0 lg:flex lg:h-[100dvh]"
+      className="relative hidden h-dvh w-[var(--nav-width)] shrink-0 flex-col border-r border-[var(--line)] bg-[rgba(9,15,24,0.92)] transition-[width] duration-200 ease-out lg:sticky lg:top-0 lg:flex"
     >
       {navOpen ? expandedBody(true) : collapsedBody}
     </aside>

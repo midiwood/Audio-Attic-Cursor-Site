@@ -62,7 +62,7 @@ export function NewPlaylistModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[120] flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-[120] flex items-end justify-center p-3 pt-[var(--mobile-chrome-top)] pb-[var(--mobile-chrome-bottom)] lg:items-center lg:p-4">
       <button
         type="button"
         className="absolute inset-0 bg-black/55"
@@ -73,7 +73,7 @@ export function NewPlaylistModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="new-playlist-title"
-        className="relative w-full max-w-sm overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] shadow-2xl"
+        className="relative w-full max-w-sm max-h-full overflow-y-auto rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] shadow-2xl"
       >
         <div className="border-b border-[var(--line)] px-4 py-3">
           <h2 id="new-playlist-title" className="text-sm font-medium text-[var(--ink)]">

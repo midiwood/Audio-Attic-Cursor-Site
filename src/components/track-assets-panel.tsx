@@ -8,6 +8,8 @@ import {
 } from "@/lib/audio-duration";
 import type { TrackAssetKind } from "@/lib/track-assets";
 import { hasPlayableAudio, mp3OnlyErrorMessage, titleFromFilename } from "@/lib/tracks";
+import { toTrackListItem, type TrackListItem } from "@/lib/track-list-item";
+import type { Track } from "@/db/schema";
 
 export type TrackAssetRow = {
   id: string;
@@ -180,12 +182,18 @@ export function TrackAssetsPanel({
   trackId,
   trackTitle,
   canEdit = false,
+  canReplaceMainMix,
+  onMainMixReplaced,
 }: {
   trackId: string;
   trackTitle: string;
   /** Show add/delete controls — only when editing track info */
   canEdit?: boolean;
+  /** Replace catalog main mix (defaults to canEdit). */
+  canReplaceMainMix?: boolean;
+  onMainMixReplaced?: (track: TrackListItem) => void;
 }) {
+  const replaceMain = canReplaceMainMix ?? canEdit;
   const { playTrack, toggle, current, isPlaying } = usePlayer();
   const [assets, setAssets] = useState<TrackAssetRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -196,8 +204,11 @@ export function TrackAssetsPanel({
   const [pendingStems, setPendingStems] = useState<PendingStem[]>([]);
   const versionInputRef = useRef<HTMLInputElement>(null);
   const stemInputRef = useRef<HTMLInputElement>(null);
+  const mainMixInputRef = useRef<HTMLInputElement>(null);
   const [versionDragOver, setVersionDragOver] = useState(false);
   const [stemDragOver, setStemDragOver] = useState(false);
+  const [mainMixDragOver, setMainMixDragOver] = useState(false);
+  const [replacingMain, setReplacingMain] = useState(false);
   const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
   const stemBusy = stemSubmitting || busyKind === "stem";
 
@@ -317,6 +328,49 @@ export function TrackAssetsPanel({
     }
   }
 
+  async function replaceMainMix(file: File) {
+    if (replacingMain || busyKind !== null) return;
+    setReplacingMain(true);
+    setError("");
+    setMessage("Replacing main mix (normalizing to −16 LUFS)…");
+
+    const form = new FormData();
+    form.append("audio", file, file.name);
+
+    try {
+      const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/replace-audio`, {
+        method: "POST",
+        body: form,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.track) {
+        setError(data.error || "Could not replace main mix");
+        setMessage("");
+        return;
+      }
+      setMessage("Main mix replaced. Play the track again to hear it.");
+      onMainMixReplaced?.(toTrackListItem(data.track as Track));
+    } catch {
+      setError("Could not replace main mix");
+      setMessage("");
+    } finally {
+      setReplacingMain(false);
+    }
+  }
+
+  function onPickMainMix(file: File | null) {
+    if (!file) return;
+    if (!/\.(mp3|wav|aiff|aif)$/i.test(file.name)) {
+      setError(mp3OnlyErrorMessage());
+      return;
+    }
+    const ok = window.confirm(
+      `Replace the catalog mix for “${trackTitle}” with ${file.name}?\n\nThis overwrites the vault MP3.`,
+    );
+    if (!ok) return;
+    void replaceMainMix(file);
+  }
+
   async function uploadStem(file: File, label: string): Promise<boolean> {
     const form = new FormData();
     form.append("kind", "stem");
@@ -341,7 +395,7 @@ export function TrackAssetsPanel({
   }
 
   function stageStemFiles(files: FileList | File[]) {
-    if (stemBusy || busyKind !== null) return;
+    if (replacingMain || stemBusy || busyKind !== null) return;
     const audio = audioFilesFromList(files);
     if (!audio.length) {
       setError(mp3OnlyErrorMessage());
@@ -419,7 +473,7 @@ export function TrackAssetsPanel({
   }
 
   function onDropFiles(kind: TrackAssetKind, files: FileList) {
-    if (busyKind !== null || stemSubmitting) return;
+    if (replacingMain || busyKind !== null || stemSubmitting) return;
     if (kind === "stem") {
       stageStemFiles(files);
       return;
@@ -455,9 +509,10 @@ export function TrackAssetsPanel({
     }
   }
 
+  const uploadsBusy = replacingMain || busyKind !== null || stemBusy;
   const hasAssets = versions.length > 0 || stems.length > 0;
 
-  if (!canEdit && !loading && !hasAssets) {
+  if (!canEdit && !replaceMain && !loading && !hasAssets) {
     return null;
   }
 
@@ -467,10 +522,61 @@ export function TrackAssetsPanel({
         Audio files
       </h3>
       <p className="mt-1 text-xs text-[var(--ink-dim)]">
-        {canEdit
-          ? "Optional versions (normalized) and stems (as uploaded). Main mix is the catalog track."
-          : "Alternate versions and stems for this track."}
+        {replaceMain
+          ? "Replace the catalog mix if convert quality is poor. Versions (normalized) and stems stay separate."
+          : canEdit
+            ? "Optional versions (normalized) and stems (as uploaded). Main mix is the catalog track."
+            : "Alternate versions and stems for this track."}
       </p>
+
+      {replaceMain ? (
+        <div
+          onDragEnter={(e) => {
+            e.preventDefault();
+            if (!uploadsBusy) setMainMixDragOver(true);
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            if (!uploadsBusy) setMainMixDragOver(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            setMainMixDragOver(false);
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            setMainMixDragOver(false);
+            const file = firstAudioFile(e.dataTransfer.files || []);
+            if (file) onPickMainMix(file);
+            else if (e.dataTransfer.files?.length) setError(mp3OnlyErrorMessage());
+          }}
+          className={`${dropZoneClass(mainMixDragOver)} mt-3`}
+        >
+          <p className="text-xs font-medium text-[var(--ink)]">Replace main mix</p>
+          <p className="mt-0.5 text-[11px] text-[var(--ink-dim)]">
+            Drop original WAV, AIFF, or MP3 — re-levels to −16 LUFS without squashing dynamics
+          </p>
+          <input
+            ref={mainMixInputRef}
+            type="file"
+            accept="audio/mpeg,audio/wav,audio/aiff,audio/x-aiff,.mp3,.wav,.aif,.aiff"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              e.target.value = "";
+              onPickMainMix(file);
+            }}
+          />
+          <button
+            type="button"
+            disabled={uploadsBusy}
+            onClick={() => mainMixInputRef.current?.click()}
+            className="mt-2 rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
+          >
+            {replacingMain ? "Replacing…" : "Choose file"}
+          </button>
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="mt-3 text-sm text-[var(--ink-muted)]">Loading…</p>
@@ -571,7 +677,7 @@ export function TrackAssetsPanel({
             />
             <button
               type="button"
-              disabled={busyKind !== null}
+              disabled={uploadsBusy}
               onClick={() => versionInputRef.current?.click()}
               className="mt-2 rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
             >

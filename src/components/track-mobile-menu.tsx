@@ -4,6 +4,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "re
 import { createPortal } from "react-dom";
 import { AutoOpenAddToPlaylist } from "@/components/auto-open-add-to-playlist";
 import { IconMoreVertical } from "@/components/icon-more-vertical";
+import { placeMenuBesideAnchor, type MenuPos } from "@/lib/fixed-menu-position";
+
+const MENU_WIDTH = 200;
 
 function MenuItem({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
@@ -38,26 +41,44 @@ export function TrackMobileMenu({
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<MenuPos | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  function placeMenu() {
+    const button = buttonRef.current;
+    if (!button) return;
+    setPos(
+      placeMenuBesideAnchor(button.getBoundingClientRect(), {
+        width: MENU_WIDTH,
+        height: menuRef.current?.offsetHeight || 140,
+      }),
+    );
+  }
 
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) {
       setPos(null);
       return;
     }
-    const rect = buttonRef.current.getBoundingClientRect();
-    const menuWidth = 200;
-    const gap = 6;
-    const left = Math.min(
-      Math.max(12, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 12,
-    );
-    const top = rect.bottom + gap;
-    setPos({ top, left });
+    placeMenu();
+    const frame = requestAnimationFrame(() => placeMenu());
+    function onReposition() {
+      placeMenu();
+    }
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    window.visualViewport?.addEventListener("resize", onReposition);
+    window.visualViewport?.addEventListener("scroll", onReposition);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+      window.visualViewport?.removeEventListener("resize", onReposition);
+      window.visualViewport?.removeEventListener("scroll", onReposition);
+    };
   }, [open]);
 
   useEffect(() => {

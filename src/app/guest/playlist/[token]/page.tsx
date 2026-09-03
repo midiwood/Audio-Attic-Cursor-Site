@@ -19,8 +19,8 @@ export default async function GuestPlaylistPage({
 
   return (
     <AppShell mode="guest" showCounts={false}>
-      <main className="min-w-0 flex-1 px-5 py-6 md:px-8 md:py-8">
-        <header className="mb-6 max-w-3xl border-b border-[var(--line)] pb-5">
+      <main className="min-w-0 flex-1 py-6">
+        <header className="mb-6 border-b border-[var(--line)] px-5 pb-5 md:px-8">
           <h1 className="text-2xl font-semibold tracking-tight text-[var(--ink)] md:text-3xl">
             {playlist.name}
           </h1>

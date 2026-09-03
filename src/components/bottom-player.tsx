@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { PlayerOverflowMenu } from "@/components/player-overflow-menu";
 import { AddToPlaylistButton } from "@/components/add-to-playlist-button";
 import { isPlayableTrack, SCROLL_TO_CURRENT_EVENT, usePlayer } from "@/components/player-provider";
@@ -41,11 +41,11 @@ function TransportControls({
     ? "grid h-10 w-10 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]"
     : "grid h-9 w-9 place-items-center rounded-full text-[var(--ink-muted)] transition hover:bg-white/5 hover:text-[var(--ink)]";
   const playClass = compact
-    ? "grid h-11 w-11 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_0_0_4px_var(--accent-soft)] transition hover:brightness-110"
+    ? "grid h-10 w-10 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_0_0_3px_var(--accent-soft)] transition hover:brightness-110"
     : "grid h-10 w-10 place-items-center rounded-full bg-[var(--accent)] text-white shadow-[0_0_0_4px_var(--accent-soft)] transition hover:brightness-110";
 
   return (
-    <div className={`flex items-center ${compact ? "shrink-0 gap-3" : "justify-start gap-1.5 md:justify-center"}`}>
+    <div className={`flex items-center ${compact ? "shrink-0 gap-1" : "justify-start gap-1.5 md:justify-center"}`}>
       <button
         type="button"
         onClick={playPrev}
@@ -92,11 +92,9 @@ export function BottomPlayer() {
   const showLicense = isStaffRole(session?.user?.role);
   const shellRef = useRef<HTMLDivElement | null>(null);
   const trackId = current?.id ?? null;
-  const [spacerHeight, setSpacerHeight] = useState(0);
 
   useLayoutEffect(() => {
     if (!trackId) {
-      setSpacerHeight(0);
       setPlayerHeightVar(0);
       return;
     }
@@ -111,9 +109,15 @@ export function BottomPlayer() {
         return;
       }
       const apply = () => {
-        const h = Math.ceil(el.getBoundingClientRect().height);
-        const next = h > 0 ? h : 88;
-        setSpacerHeight(next);
+        const shell = shellRef.current;
+        if (!shell) return;
+        let h = 0;
+        for (const child of shell.children) {
+          const node = child as HTMLElement;
+          if (getComputedStyle(node).display === "none") continue;
+          h = Math.max(h, Math.ceil(node.getBoundingClientRect().height));
+        }
+        const next = h > 0 ? h : 72;
         setPlayerHeightVar(next);
       };
       apply();
@@ -134,17 +138,14 @@ export function BottomPlayer() {
   const status = normalizeLicenseStatus(current.license);
 
   return (
-    <>
-      <div className="w-full shrink-0" style={{ height: spacerHeight }} aria-hidden />
-
       <div
         ref={shellRef}
-        className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--mobile-tab-bar-height,49px)+env(safe-area-inset-bottom,0px))] z-50 lg:bottom-0 lg:left-[var(--nav-width)]"
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-50 lg:left-[var(--nav-width)]"
       >
         {/* Mobile: title + transport */}
-        <div className="pointer-events-auto border-t border-[var(--line)] bg-[rgba(8,14,22,0.94)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:hidden">
-          <PlayerProgressBar />
-          <div className="flex h-14 items-center gap-3 px-3">
+        <div className="player-mobile pointer-events-auto bg-[rgba(8,14,22,0.94)] pb-[max(0.625rem,env(safe-area-inset-bottom,0px))] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl">
+          <PlayerProgressBar className="player-progress-bar-edge" />
+          <div className="flex min-h-14 items-center gap-2 px-4 py-2">
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-semibold tracking-tight text-[var(--ink)]">
                 {current.title}
@@ -189,8 +190,8 @@ export function BottomPlayer() {
         </div>
 
         {/* Desktop: full player */}
-        <div className="pointer-events-auto hidden border-t border-[var(--line)] bg-[rgba(8,14,22,0.94)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:block lg:border-l lg:border-[var(--line)]">
-          <div className="mx-auto grid max-w-[1600px] gap-3 px-4 py-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_auto] md:items-center md:gap-5 md:px-6 md:py-3.5">
+        <div className="player-desktop pointer-events-auto border-t border-[var(--line)] bg-[rgba(8,14,22,0.94)] shadow-[0_-12px_40px_rgba(0,0,0,0.35)] backdrop-blur-2xl lg:border-l lg:border-[var(--line)]">
+          <div className="mx-auto grid max-w-[1600px] items-center gap-5 px-6 py-2.5 grid-cols-[minmax(0,1fr)_auto_minmax(0,1.4fr)_auto]">
             <div className="min-w-0 order-1">
               <div className="truncate text-sm font-semibold tracking-tight text-[var(--ink)] md:text-[15px]">
                 {current.title}
@@ -287,6 +288,5 @@ export function BottomPlayer() {
           </div>
         </div>
       </div>
-    </>
   );
 }

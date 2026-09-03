@@ -373,7 +373,7 @@ export function CatalogTrackList({
 
   return (
     <div>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 lg:px-6">
         {canEdit && !prepareProMode ? (
           <button
             type="button"
@@ -406,13 +406,13 @@ export function CatalogTrackList({
       </div>
 
       {batchNotice ? (
-        <p className="mb-3 rounded-lg border border-[var(--available)]/30 bg-[var(--available)]/10 px-3 py-2 text-sm text-[var(--available)]">
+        <p className="mb-3 mx-4 rounded-lg border border-[var(--available)]/30 bg-[var(--available)]/10 px-3 py-2 text-sm text-[var(--available)] lg:mx-6">
           {batchNotice}
         </p>
       ) : null}
 
       {selectionActive && total > 0 ? (
-        <div className="mb-3 flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--bg-elevated)]/70 px-4 py-2.5 xl:hidden">
+        <div className="mb-3 mx-4 flex items-center gap-3 rounded-lg border border-[var(--line)] bg-[var(--bg-elevated)]/70 px-4 py-2.5 xl:hidden lg:mx-6">
           <label className="flex items-center gap-2 text-xs text-[var(--ink-dim)]">
             <input
               type="checkbox"

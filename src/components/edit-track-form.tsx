@@ -296,6 +296,9 @@ export function EditTrackForm({
         trackId={track.id}
         trackTitle={formatDisplayTitle(track)}
         canEdit
+        onMainMixReplaced={(nextTrack) => {
+          if (nextTrack.duration) patchForm({ duration: nextTrack.duration });
+        }}
       />
 
       <TrackLineageLinker

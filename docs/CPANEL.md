@@ -2,6 +2,8 @@
 
 Audio Attic is a long-running Next.js app with SQLite. It is **not** a Vercel/static deploy.
 
+For the full no-SSH install/update playbook (Git, `.next` zip, `better-sqlite3`, what not to click), see **[INSTALL-AND-UPDATE.md](./INSTALL-AND-UPDATE.md)**.
+
 ## cPanel settings
 
 | Field | Value |
@@ -50,7 +52,9 @@ Then Restart the app in cPanel.
 ## Notes
 
 - **Startup file must be `app.js`** — Passenger needs a file that calls `listen()`. Do not point startup at `package.json` alone.
-- SQLite lives in `data/attic.db` — that directory must be writable.
+- SQLite lives in `data/attic.db` — that directory must be writable by the Node/Passenger process (Admin settings, imports, playlists all write here).
+- **SQLite permissions (File Manager):** `data/` → **755** (or **775**), `attic.db` → **664** or **666**. WAL mode also needs write access to `attic.db-wal` and `attic.db-shm` in the same folder. If saves work locally but fail on live, permissions/ownership are the usual cause.
+- **Reset a stuck WAL (only with the Node app stopped):** Restart/Stop the app in Setup Node.js App, delete `data/attic.db-wal` and `data/attic.db-shm`, then Start again. SQLite reopens from `attic.db`. Do not delete those files while the app is running.
 - Vault normalize / waveforms need **`ffmpeg`** on the server. If missing, browsing/playback of already-vaulted MP3s can still work; new vault ingest may fail.
 - Prefer building **on the server** (same Node version) so `better-sqlite3` native bindings match.
 - Do not use Application root = empty subdomain docroot that only has `.well-known` if `package.json` is in a subfolder — point Application root at the subfolder that has `package.json`.

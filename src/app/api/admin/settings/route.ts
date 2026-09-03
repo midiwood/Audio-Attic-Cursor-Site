@@ -49,7 +49,19 @@ export async function POST(req: NextRequest) {
 
   const clear = clearIn.filter((key): key is SettingKey => ALLOWED.has(key));
 
-  applySettingUpdates({ values, clear });
+  try {
+    applySettingUpdates({ values, clear });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[admin/settings] save failed", message);
+    const hint = /READONLY|readonly|EACCES|EPERM/i.test(message)
+      ? " The data/ folder or attic.db is not writable by the Node app — see docs/CPANEL.md (SQLite permissions)."
+      : "";
+    return NextResponse.json(
+      { error: `Could not save settings: ${message}.${hint}` },
+      { status: 500 },
+    );
+  }
 
   const publisherKeys = [
     SETTINGS.PUBLISHER_HOUSE_NAME,

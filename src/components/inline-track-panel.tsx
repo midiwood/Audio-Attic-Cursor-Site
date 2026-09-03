@@ -268,6 +268,9 @@ export function InlineTrackPanel({
           onSaved?.(nextTrack, relations);
           setEditing(false);
         }}
+        onMainMixReplaced={(nextTrack) => {
+          onSaved?.(nextTrack, lineage);
+        }}
         onTrashed={(trackId) => {
           onTrashed?.(trackId);
           setEditing(false);
@@ -288,6 +291,7 @@ export function InlineTrackPanel({
       onLicenseCountChange={onLicenseCountChange}
       userLicenseStatus={userLicenseStatus}
       onEdit={() => setEditing(true)}
+      onMainMixReplaced={(nextTrack) => onSaved?.(nextTrack, lineage)}
     />
   );
 }
@@ -303,6 +307,7 @@ function InlineTrackView({
   onLicenseCountChange,
   userLicenseStatus = null,
   onEdit,
+  onMainMixReplaced,
 }: {
   track: TrackListItem;
   lineage: TrackRelationView[];
@@ -314,6 +319,7 @@ function InlineTrackView({
   onLicenseCountChange?: (count: number) => void;
   userLicenseStatus?: UserTrackLicenseStatus | null;
   onEdit: () => void;
+  onMainMixReplaced?: (track: TrackListItem) => void;
 }) {
   const { playTrack, current, isPlaying } = usePlayer();
   const [openLineageId, setOpenLineageId] = useState<string | null>(null);
@@ -440,6 +446,8 @@ function InlineTrackView({
         trackId={track.id}
         trackTitle={formatDisplayTitle(track)}
         canEdit={false}
+        canReplaceMainMix={canEdit}
+        onMainMixReplaced={onMainMixReplaced}
       />
 
       {!subscriberView && lineage.length ? (
@@ -541,6 +549,7 @@ function InlineTrackEditor({
   onCancel,
   onSaved,
   onTrashed,
+  onMainMixReplaced,
 }: {
   track: TrackListItem;
   initialRelations: TrackRelationView[];
@@ -553,6 +562,7 @@ function InlineTrackEditor({
   onCancel: () => void;
   onSaved: (track: TrackListItem, relations: TrackRelationView[]) => void;
   onTrashed: (trackId: string) => void;
+  onMainMixReplaced?: (track: TrackListItem) => void;
 }) {
   const [form, setForm] = useState({
     libraryTitle: track.libraryTitle || "",
@@ -965,6 +975,10 @@ function InlineTrackEditor({
         trackId={track.id}
         trackTitle={formatDisplayTitle(track)}
         canEdit
+        onMainMixReplaced={(nextTrack) => {
+          if (nextTrack.duration) patchForm({ duration: nextTrack.duration });
+          onMainMixReplaced?.(nextTrack);
+        }}
       />
     </form>
   );

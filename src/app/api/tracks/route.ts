@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   }
   if (!staff) {
     filters.samro = undefined;
+    filters.year = undefined;
   }
 
   const limitRaw = Number(params.get("limit") ?? CATALOG_PAGE_SIZE);

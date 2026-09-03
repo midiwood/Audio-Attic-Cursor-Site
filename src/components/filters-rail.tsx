@@ -1,15 +1,16 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import {
   consumeQueuedMobileFiltersOpen,
-  requestMobileFiltersOpen,
   setMobileFiltersOpen,
   subscribeMobileFiltersOpen,
   subscribeMobileFiltersOpenRequest,
 } from "@/lib/mobile-filters-panel";
 
 const STORAGE_KEY = "attic-filters-open";
+const DESKTOP_MQ = "(min-width: 1024px)";
 
 export function FiltersRail({
   children,
@@ -20,23 +21,27 @@ export function FiltersRail({
 }) {
   const [desktopOpen, setDesktopOpen] = useState(true);
   const [mobileOpen, setMobileOpenState] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const update = () => setIsDesktop(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const mq = window.matchMedia(DESKTOP_MQ);
+    function onBreakpoint() {
+      if (mq.matches) setMobileFiltersOpen(false);
+    }
+    onBreakpoint();
+    mq.addEventListener("change", onBreakpoint);
+    return () => mq.removeEventListener("change", onBreakpoint);
   }, []);
 
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      const desktop = window.matchMedia("(min-width: 1024px)").matches;
-      if (desktop) {
+      if (window.matchMedia(DESKTOP_MQ).matches) {
         if (stored === "0") setDesktopOpen(false);
-        else if (stored === "1") setDesktopOpen(true);
         else setDesktopOpen(true);
       }
     } catch {
@@ -71,52 +76,59 @@ export function FiltersRail({
     setMobileFiltersOpen(false);
   }
 
-  function openMobile() {
-    requestMobileFiltersOpen();
-  }
-
-  function toggleMobile() {
-    if (mobileOpen) closeMobile();
-    else openMobile();
-  }
-
-  const mobilePanelOpen = mobileOpen;
+  const mobileOverlay =
+    mounted && mobileOpen
+      ? createPortal(
+          <div className="lg:hidden">
+            <button
+              type="button"
+              className="fixed inset-0 z-[34] bg-black/40"
+              aria-label="Close filters"
+              onClick={closeMobile}
+            />
+            <div
+              className="mobile-filters-panel"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Filters"
+            >
+              <div className="max-h-[inherit] overflow-y-auto">
+                <div className="mobile-filters-panel-header sticky top-0 z-10 flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
+                  <span className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]">
+                    Filters
+                    {activeCount > 0 ? (
+                      <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--accent)]">
+                        {activeCount}
+                      </span>
+                    ) : null}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={closeMobile}
+                    className="rounded-md px-2 py-1 text-sm text-[var(--accent)]"
+                  >
+                    Done
+                  </button>
+                </div>
+                <div className="px-4 pb-6 pt-3">{children}</div>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <>
-      {/* Mobile: collapsible filters (in document flow — not sticky) */}
-      {!isDesktop ? (
-        <div className="border-b border-[var(--line)] bg-[rgba(11,20,32,0.55)] lg:hidden">
-          <button
-            type="button"
-            onClick={toggleMobile}
-            className="flex w-full items-center justify-between px-4 py-3 text-sm text-[var(--ink-muted)]"
-            aria-expanded={mobilePanelOpen}
-          >
-            <span className="flex items-center gap-2 font-medium text-[var(--ink)]">
-              Filters
-              {activeCount > 0 ? (
-                <span className="rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] tabular-nums text-[var(--accent)]">
-                  {activeCount}
-                </span>
-              ) : null}
-            </span>
-            <span className="text-xs text-[var(--ink-dim)]">{mobilePanelOpen ? "Hide" : "Show"}</span>
-          </button>
-          {mobilePanelOpen ? (
-            <div className="border-t border-[var(--line)] px-4 pb-4 pt-3">{children}</div>
-          ) : null}
-        </div>
-      ) : null}
+      {mobileOverlay}
 
-      {/* Desktop collapsible rail */}
-      {isDesktop ? (
+      {/* Desktop only — CSS hidden below lg, never used as the mobile panel */}
       <aside
-        className={`relative shrink-0 border-r border-[var(--line)] bg-[rgba(11,20,32,0.55)] transition-[width] duration-200 ease-out lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col ${
+        className={`relative hidden shrink-0 border-r border-[var(--line)] bg-[rgba(11,20,32,0.55)] transition-[width] duration-200 ease-out lg:sticky lg:top-0 lg:flex lg:h-[100dvh] lg:flex-col ${
           desktopOpen ? "lg:w-72 xl:w-80" : "lg:w-11"
         }`}
       >
-        {desktopOpen ? (
+        {mobileOpen ? null : desktopOpen ? (
           <>
             <div className="flex items-center justify-between border-b border-[var(--line)] px-4 py-3">
               <div className="flex items-center gap-2">
@@ -179,7 +191,6 @@ export function FiltersRail({
           </button>
         )}
       </aside>
-      ) : null}
     </>
   );
 }

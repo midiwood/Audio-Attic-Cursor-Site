@@ -120,13 +120,25 @@ const GRID_COLS_SUBSCRIBER =
 const GRID_COLS_PREPARE =
   "xl:grid-cols-[72px_minmax(0,1.6fr)_minmax(220px,auto)_64px_88px_130px]";
 function playButtonClass(active: boolean, playing: boolean) {
-  if (active && playing) {
-    return "border-[var(--accent)] bg-[var(--accent)] text-white shadow-[0_0_0_3px_var(--accent-soft)]";
+  if (active && playing) return "track-play-btn-playing";
+  if (active) return "track-play-btn-active";
+  return "";
+}
+
+function TrackPlayIcon({ pause }: { pause: boolean }) {
+  if (pause) {
+    return (
+      <svg viewBox="0 0 24 24" aria-hidden>
+        <rect x="6" y="5" width="4" height="14" rx="0.75" />
+        <rect x="14" y="5" width="4" height="14" rx="0.75" />
+      </svg>
+    );
   }
-  if (active) {
-    return "border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--ink)]";
-  }
-  return "border-[var(--line)] text-[var(--ink)] hover:border-[var(--accent)] hover:bg-[var(--accent-soft)]";
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden>
+      <path d="M8 5.14v13.72L19.5 12 8 5.14Z" />
+    </svg>
+  );
 }
 
 function toPlayerTrack(track: TrackListItem, subscriberView = false): PlayerTrack {
@@ -327,8 +339,8 @@ export function TrackList({
         : GRID_COLS;
   const mobileGridCols =
     prepareProMode || showSelection
-      ? "grid-cols-[72px_minmax(0,1fr)_auto]"
-      : "grid-cols-[44px_minmax(0,1fr)_auto]";
+      ? "grid-cols-[auto_minmax(0,1fr)_auto]"
+      : "grid-cols-[2.75rem_minmax(0,1fr)_auto]";
 
   useEffect(() => {
     if (!initiallyExpanded || !firstTrackId) return;
@@ -407,7 +419,7 @@ export function TrackList({
 
   if (!tracks.length) {
     return (
-      <div className="rounded-xl border border-dashed border-[var(--line)] bg-[var(--bg-elevated)]/50 px-6 py-16 text-center text-[var(--ink-muted)]">
+      <div className="track-list-shell border-y border-dashed border-[var(--line)] bg-[var(--bg-elevated)]/50 px-6 py-16 text-center text-[var(--ink-muted)]">
         <p>No tracks match these filters.</p>
         <p className="mt-2 text-sm text-[var(--ink-dim)]">
           Within a category any match counts; across categories every filter must match.
@@ -426,7 +438,7 @@ export function TrackList({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)]/70 shadow-[0_20px_60px_rgba(0,0,0,0.25)]">
+    <div className="track-list-shell border-y border-[var(--line)] bg-[var(--bg-elevated)]/70">
       <div
         className={`hidden gap-3 border-b border-[var(--line)] px-4 py-3 text-[11px] font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)] xl:grid ${gridCols}`}
       >
@@ -549,9 +561,9 @@ export function TrackList({
               }`}
             >
               <div
-                className={`grid ${mobileGridCols} items-center gap-3 px-3 py-2.5 lg:py-3 xl:px-4 ${gridCols}`}
+                className={`grid w-full min-w-0 ${mobileGridCols} items-center gap-3 px-3 py-2.5 lg:py-3 xl:px-4 ${gridCols}`}
               >
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center justify-center gap-1">
                   {showSelection && onToggleSelect ? (
                     <input
                       type="checkbox"
@@ -562,7 +574,7 @@ export function TrackList({
                           ? `Incomplete: ${readiness.missing.join(", ")}`
                           : "Select for batch actions"
                       }
-                      className="h-4 w-4 accent-[var(--accent)]"
+                      className="h-4 w-4 shrink-0 accent-[var(--accent)]"
                       aria-label={`Select ${title}`}
                     />
                   ) : null}
@@ -570,10 +582,10 @@ export function TrackList({
                     type="button"
                     disabled={!canPlay}
                     onClick={handlePlay}
-                    className={`grid h-10 w-10 place-items-center rounded-full border text-sm transition disabled:cursor-not-allowed disabled:opacity-30 ${playButtonClass(active, isPlaying)}`}
+                    className={`track-play-btn ${playButtonClass(active, isPlaying)}`}
                     aria-label={active && isPlaying ? `Pause ${title}` : `Play ${title}`}
                   >
-                    {active && isPlaying ? "❚❚" : "▶"}
+                    <TrackPlayIcon pause={Boolean(active && isPlaying)} />
                   </button>
                 </div>
 

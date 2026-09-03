@@ -18,7 +18,8 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ## Production (cPanel Node.js)
 
-See **[docs/CPANEL.md](docs/CPANEL.md)** for shared-hosting setup.
+No-SSH install and update playbook: **[docs/INSTALL-AND-UPDATE.md](docs/INSTALL-AND-UPDATE.md)**.  
+Shorter hosting notes: **[docs/CPANEL.md](docs/CPANEL.md)**.
 
 Summary: Node **20+**, Application root = folder with `package.json`, startup file = **`app.js`**, set `BETTER_AUTH_URL` to your HTTPS subdomain, then `npm run build` and Restart.
 

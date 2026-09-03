@@ -42,26 +42,29 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   if (subscriber) {
     filters.license = "available";
   }
-  // SAMRO is staff-only; ignore if a subscriber somehow has it in the URL.
+  // SAMRO and year are staff-only; ignore if a subscriber somehow has them in the URL.
   if (!staff) {
     filters.samro = undefined;
+    filters.year = undefined;
   }
 
   // Subscribers: always available-only; keep license out of the URL.
-  // Non-staff: strip samro from the shareable/clean query.
+  // Non-staff: strip samro and year from the shareable/clean query.
   const queryFilters: TrackFilters = subscriber
-    ? { ...filters, license: "all", samro: undefined }
+    ? { ...filters, license: "all", samro: undefined, year: undefined }
     : staff
       ? filters
-      : { ...filters, samro: undefined };
+      : { ...filters, samro: undefined, year: undefined };
   const cleanQuery = catalogFiltersToQuery(queryFilters);
   const incomingQuery = catalogFiltersToQuery(parseCatalogFilters(params));
   const licenseInUrl = Array.isArray(params.license) ? params.license[0] : params.license;
   const samroInUrl = Array.isArray(params.samro) ? params.samro[0] : params.samro;
+  const yearInUrl = Array.isArray(params.year) ? params.year[0] : params.year;
   if (
     incomingQuery !== cleanQuery ||
     (subscriber && licenseInUrl) ||
-    (!staff && samroInUrl)
+    (!staff && samroInUrl) ||
+    (!staff && yearInUrl)
   ) {
     redirect(cleanQuery ? `/?${cleanQuery}` : "/");
   }
@@ -129,11 +132,12 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
             matchCount={total}
             hideLicenseFilter={subscriber}
             showSamroFilter={staff}
+            showYearFilter={staff}
           />
         </BrowseFiltersRail>
       </Suspense>
-      <main className="min-w-0 flex-1 px-4 pt-4 md:px-8 md:py-8 lg:px-5 lg:py-6">
-        <header className="mb-4 border-b border-[var(--line)] pb-4 lg:mb-6 lg:pb-5">
+      <main className="min-w-0 flex-1 pt-4 lg:pt-6">
+        <header className="mb-4 border-b border-[var(--line)] px-4 pb-4 lg:mb-6 lg:px-6 lg:pb-5">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight text-[var(--ink)] lg:text-3xl">
             Browse
             {prepareProMode ? <PrepareProInfo /> : null}

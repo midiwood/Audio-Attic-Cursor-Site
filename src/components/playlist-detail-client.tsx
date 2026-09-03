@@ -122,8 +122,8 @@ export function PlaylistDetailClient({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
+    <div>
+      <div className="mb-6 flex flex-wrap items-center gap-3 px-5 md:px-8">
         <button
           type="button"
           disabled={!queue.length}
@@ -167,12 +167,14 @@ export function PlaylistDetailClient({
         </span>
       </div>
       {batchNotice ? (
-        <p className="rounded-lg border border-[var(--available)]/30 bg-[var(--available)]/10 px-3 py-2 text-sm text-[var(--available)]">
+        <p className="mb-6 mx-5 rounded-lg border border-[var(--available)]/30 bg-[var(--available)]/10 px-3 py-2 text-sm text-[var(--available)] md:mx-8">
           {batchNotice}
         </p>
       ) : null}
       {downloadError ? (
-        <p className="text-sm text-[var(--exclusive)]">{downloadError}</p>
+        <p className="mb-6 mx-5 text-sm text-[var(--exclusive)] md:mx-8">
+          {downloadError}
+        </p>
       ) : null}
       <TrackList
         tracks={tracks}

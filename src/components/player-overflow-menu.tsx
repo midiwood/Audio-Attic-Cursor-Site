@@ -5,6 +5,9 @@ import { createPortal } from "react-dom";
 import { AutoOpenAddToPlaylist } from "@/components/auto-open-add-to-playlist";
 import { IconMoreVertical } from "@/components/icon-more-vertical";
 import { SCROLL_TO_CURRENT_EVENT } from "@/components/player-provider";
+import { placeMenuBesideAnchor, type MenuPos } from "@/lib/fixed-menu-position";
+
+const MENU_WIDTH = 200;
 
 function MenuItem({ onClick, children }: { onClick: () => void; children: ReactNode }) {
   return (
@@ -37,26 +40,44 @@ export function PlayerOverflowMenu({
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<MenuPos | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  function placeMenu() {
+    const button = buttonRef.current;
+    if (!button) return;
+    setPos(
+      placeMenuBesideAnchor(button.getBoundingClientRect(), {
+        width: MENU_WIDTH,
+        height: menuRef.current?.offsetHeight || 96,
+      }),
+    );
+  }
 
   useLayoutEffect(() => {
     if (!open || !buttonRef.current) {
       setPos(null);
       return;
     }
-    const rect = buttonRef.current.getBoundingClientRect();
-    const menuWidth = 200;
-    const gap = 8;
-    const left = Math.min(
-      Math.max(12, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 12,
-    );
-    const top = rect.top - gap;
-    setPos({ top, left });
+    placeMenu();
+    const frame = requestAnimationFrame(() => placeMenu());
+    function onReposition() {
+      placeMenu();
+    }
+    window.addEventListener("resize", onReposition);
+    window.addEventListener("scroll", onReposition, true);
+    window.visualViewport?.addEventListener("resize", onReposition);
+    window.visualViewport?.addEventListener("scroll", onReposition);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", onReposition);
+      window.removeEventListener("scroll", onReposition, true);
+      window.visualViewport?.removeEventListener("resize", onReposition);
+      window.visualViewport?.removeEventListener("scroll", onReposition);
+    };
   }, [open]);
 
   useEffect(() => {
@@ -82,7 +103,7 @@ export function PlayerOverflowMenu({
       ? createPortal(
           <div
             ref={menuRef}
-            style={{ top: pos.top, left: pos.left, transform: "translateY(-100%)" }}
+            style={{ top: pos.top, left: pos.left }}
             className="fixed z-[100] w-[200px] overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)] py-1 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
             role="menu"
           >

@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { setLastPlaylist } from "@/lib/last-playlist";
+import { placeMenuBesideAnchor, type MenuPos } from "@/lib/fixed-menu-position";
 
 type PlaylistOption = {
   id: string;
@@ -11,9 +12,86 @@ type PlaylistOption = {
   isOwner?: boolean;
 };
 
-type MenuPos = { top: number; left: number };
+const MENU_WIDTH = 272;
 
-export function AddToPlaylistButton({ trackId }: { trackId: string }) {
+function useIsMobileFrame() {
+  const [mobile, setMobile] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 1023px)");
+    const update = () => setMobile(mq.matches);
+    update();
+    mq.addEventListener("change", update);
+    return () => mq.removeEventListener("change", update);
+  }, []);
+  return mobile;
+}
+
+function PickerBody({
+  playlists,
+  loading,
+  message,
+  newName,
+  setNewName,
+  onAdd,
+  onCreate,
+}: {
+  playlists: PlaylistOption[];
+  loading: boolean;
+  message: string;
+  newName: string;
+  setNewName: (value: string) => void;
+  onAdd: (id: string, name?: string) => void;
+  onCreate: (e: FormEvent) => void;
+}) {
+  return (
+    <>
+      <div className="max-h-48 overflow-auto p-1">
+        {loading ? (
+          <div className="px-3 py-3 text-sm text-[var(--ink-dim)]">Loading…</div>
+        ) : playlists.length ? (
+          playlists.map((playlist) => (
+            <button
+              key={playlist.id}
+              type="button"
+              onClick={() => onAdd(playlist.id, playlist.name)}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-[var(--ink)] transition hover:bg-[var(--accent-soft)]"
+            >
+              <span className="truncate">{playlist.name}</span>
+              <span className="text-xs text-[var(--ink-dim)]">{playlist.trackCount}</span>
+            </button>
+          ))
+        ) : (
+          <div className="px-3 py-3 text-sm text-[var(--ink-dim)]">No playlists yet</div>
+        )}
+      </div>
+      <form onSubmit={onCreate} className="border-t border-[var(--line)] p-2">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          placeholder="New playlist name"
+          className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2.5 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
+        />
+        <button
+          type="submit"
+          className="w-full rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white transition hover:brightness-110"
+        >
+          Create & add
+        </button>
+        {message ? (
+          <p className="mt-2 text-center text-xs text-[var(--available)]">{message}</p>
+        ) : null}
+      </form>
+    </>
+  );
+}
+
+export function AddToPlaylistButton({
+  trackId,
+  autoOpen = false,
+}: {
+  trackId: string;
+  autoOpen?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [playlists, setPlaylists] = useState<PlaylistOption[]>([]);
   const [loading, setLoading] = useState(false);
@@ -23,6 +101,8 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
   const [mounted, setMounted] = useState(false);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = useIsMobileFrame();
+  const useSheet = autoOpen || isMobile;
 
   useEffect(() => {
     setMounted(true);
@@ -30,35 +110,18 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
 
   function placeMenu() {
     const button = buttonRef.current;
+    const menu = menuRef.current;
     if (!button) return;
-    const rect = button.getBoundingClientRect();
-    const menuWidth = 272;
-    const gap = 8;
-    const left = Math.min(
-      Math.max(12, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 12,
-    );
-    const spaceBelow = window.innerHeight - rect.bottom - gap;
-    const estimatedHeight = 320;
-    const openUp = spaceBelow < estimatedHeight && rect.top > spaceBelow;
-    const top = openUp ? Math.max(12, rect.top - gap) : rect.bottom + gap;
-    setPos({
-      top,
-      left,
+    const next = placeMenuBesideAnchor(button.getBoundingClientRect(), {
+      width: MENU_WIDTH,
+      height: menu?.offsetHeight || 320,
     });
-    // If opening upward, we'll flip with transform after measuring
-    if (openUp && menuRef.current) {
-      const height = menuRef.current.offsetHeight || estimatedHeight;
-      setPos({
-        top: Math.max(12, rect.top - height - gap),
-        left,
-      });
-    }
+    setPos(next);
   }
 
   useLayoutEffect(() => {
-    if (!open) {
-      setPos(null);
+    if (!open || useSheet) {
+      if (!open) setPos(null);
       return;
     }
     placeMenu();
@@ -67,29 +130,22 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
     }
     window.addEventListener("resize", onReposition);
     window.addEventListener("scroll", onReposition, true);
+    window.visualViewport?.addEventListener("resize", onReposition);
+    window.visualViewport?.addEventListener("scroll", onReposition);
     return () => {
       window.removeEventListener("resize", onReposition);
       window.removeEventListener("scroll", onReposition, true);
+      window.visualViewport?.removeEventListener("resize", onReposition);
+      window.visualViewport?.removeEventListener("scroll", onReposition);
     };
-  }, [open]);
-
-  useLayoutEffect(() => {
-    if (!open || !pos || !menuRef.current || !buttonRef.current) return;
-    const button = buttonRef.current.getBoundingClientRect();
-    const menu = menuRef.current.getBoundingClientRect();
-    const gap = 8;
-    const spaceBelow = window.innerHeight - button.bottom - gap;
-    if (spaceBelow < menu.height && button.top > spaceBelow) {
-      const top = Math.max(12, button.top - menu.height - gap);
-      if (Math.abs(top - pos.top) > 1) setPos((prev) => (prev ? { ...prev, top } : prev));
-    }
-  }, [open, pos, playlists, loading, message]);
+  }, [open, useSheet, playlists, loading, message]);
 
   useEffect(() => {
     if (!open) return;
     function onClick(e: MouseEvent) {
       const target = e.target as Node;
       if (buttonRef.current?.contains(target) || menuRef.current?.contains(target)) return;
+      if (useSheet) return;
       setOpen(false);
     }
     function onKey(e: KeyboardEvent) {
@@ -101,7 +157,7 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
       document.removeEventListener("mousedown", onClick);
       document.removeEventListener("keydown", onKey);
     };
-  }, [open]);
+  }, [open, useSheet]);
 
   async function loadPlaylists() {
     setLoading(true);
@@ -118,6 +174,12 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
     await loadPlaylists();
   }
 
+  useEffect(() => {
+    if (!autoOpen) return;
+    void openMenu();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open once on mount
+  }, [autoOpen]);
+
   async function addTo(playlistId: string, playlistName?: string) {
     setMessage("");
     const res = await fetch("/api/playlists", {
@@ -131,9 +193,7 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
       return;
     }
     const name =
-      playlistName ||
-      playlists.find((p) => p.id === playlistId)?.name ||
-      "playlist";
+      playlistName || playlists.find((p) => p.id === playlistId)?.name || "playlist";
     setLastPlaylist({ id: playlistId, name });
     setMessage("Added");
     await loadPlaylists();
@@ -157,8 +217,56 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
     await addTo(createData.playlist.id, createData.playlist.name || name);
   }
 
-  const menu =
-    open && mounted && pos
+  const picker = (
+    <PickerBody
+      playlists={playlists}
+      loading={loading}
+      message={message}
+      newName={newName}
+      setNewName={setNewName}
+      onAdd={(id, name) => void addTo(id, name)}
+      onCreate={(e) => void createAndAdd(e)}
+    />
+  );
+
+  const sheet =
+    open && mounted && useSheet
+      ? createPortal(
+          <div className="fixed inset-x-0 top-[var(--mobile-chrome-top)] bottom-[var(--mobile-chrome-bottom)] z-[100] flex items-end justify-center p-3 lg:items-center">
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/50"
+              aria-label="Close"
+              onClick={() => setOpen(false)}
+            />
+            <div
+              ref={menuRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add to playlist"
+              className="relative z-[1] w-full max-w-lg max-h-full overflow-y-auto rounded-2xl border border-[var(--line)] bg-[var(--bg-elevated)] font-sans shadow-[0_20px_50px_rgba(0,0,0,0.55)]"
+            >
+              <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
+                <span className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
+                  Add to playlist
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="rounded-md px-2 py-1 text-sm text-[var(--accent)]"
+                >
+                  Done
+                </button>
+              </div>
+              {picker}
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
+  const popover =
+    open && mounted && !useSheet && pos
       ? createPortal(
           <div
             ref={menuRef}
@@ -168,46 +276,15 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
             <div className="border-b border-[var(--line)] px-3 py-2 text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
               Add to playlist
             </div>
-            <div className="max-h-48 overflow-auto p-1">
-              {loading ? (
-                <div className="px-3 py-3 text-sm text-[var(--ink-dim)]">Loading…</div>
-              ) : playlists.length ? (
-                playlists.map((playlist) => (
-                  <button
-                    key={playlist.id}
-                    type="button"
-                    onClick={() => void addTo(playlist.id, playlist.name)}
-                    className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-sm text-[var(--ink)] transition hover:bg-[var(--accent-soft)]"
-                  >
-                    <span className="truncate">{playlist.name}</span>
-                    <span className="text-xs text-[var(--ink-dim)]">{playlist.trackCount}</span>
-                  </button>
-                ))
-              ) : (
-                <div className="px-3 py-3 text-sm text-[var(--ink-dim)]">No playlists yet</div>
-              )}
-            </div>
-            <form onSubmit={createAndAdd} className="border-t border-[var(--line)] p-2">
-              <input
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="New playlist name"
-                className="mb-2 w-full rounded-lg border border-[var(--line)] bg-[var(--bg)] px-2.5 py-2 text-sm text-[var(--ink)] outline-none focus:border-[var(--accent)]"
-              />
-              <button
-                type="submit"
-                className="w-full rounded-lg bg-[var(--accent)] px-3 py-2 text-sm font-medium text-white transition hover:brightness-110"
-              >
-                Create & add
-              </button>
-              {message ? (
-                <p className="mt-2 text-center text-xs text-[var(--available)]">{message}</p>
-              ) : null}
-            </form>
+            {picker}
           </div>,
           document.body,
         )
       : null;
+
+  if (autoOpen) {
+    return sheet;
+  }
 
   return (
     <>
@@ -222,7 +299,7 @@ export function AddToPlaylistButton({ trackId }: { trackId: string }) {
       >
         +
       </button>
-      {menu}
+      {useSheet ? sheet : popover}
     </>
   );
 }

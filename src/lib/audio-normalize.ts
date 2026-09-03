@@ -1,5 +1,12 @@
 /**
- * Normalize audio to -16 LUFS (two-pass loudnorm) and encode MP3.
+ * Normalize audio to −16 LUFS and encode MP3.
+ *
+ * Pass 1 measures integrated loudness (EBU R128 / loudnorm). Pass 2 applies
+ * gain only (`volume=`). We do not use loudnorm’s LRA=11 dynamic mode — that
+ * is a broadcast default and silently compresses wide library cues when
+ * `linear=true` cannot be honored. −16 LUFS here is a level match, not
+ * radio-style compression. A true-peak limiter runs only if gain would push
+ * peaks above −1.5 dBTP.
  */
 
 import { spawn } from "child_process";
@@ -9,7 +16,8 @@ import path from "path";
 
 const TARGET_I = -16;
 const TARGET_TP = -1.5;
-const TARGET_LRA = 11;
+/** Linear amplitude for −1.5 dBTP (10^(dB/20)). */
+const TARGET_TP_LINEAR = 10 ** (TARGET_TP / 20);
 const MP3_BITRATE = "192k";
 
 function spawnCapture(
@@ -49,9 +57,9 @@ function extForHint(hint: string): string {
 type LoudnormMeasured = {
   input_i: string;
   input_tp: string;
-  input_lra: string;
-  input_thresh: string;
-  target_offset: string;
+  input_lra?: string;
+  input_thresh?: string;
+  target_offset?: string;
 };
 
 function parseLoudnormJson(stderr: string): LoudnormMeasured {
@@ -60,12 +68,45 @@ function parseLoudnormJson(stderr: string): LoudnormMeasured {
     throw new Error("ffmpeg loudnorm did not return measurement JSON");
   }
   const parsed = JSON.parse(match[0]) as LoudnormMeasured;
-  for (const key of ["input_i", "input_tp", "input_lra", "input_thresh", "target_offset"] as const) {
+  for (const key of ["input_i", "input_tp"] as const) {
     if (parsed[key] == null || String(parsed[key]).trim() === "") {
       throw new Error(`ffmpeg loudnorm missing ${key}`);
     }
   }
   return parsed;
+}
+
+/** ffmpeg prints -inf / inf for silence or unusable loudness. */
+function parseLoudnormNumber(value: string): number | null {
+  const n = Number.parseFloat(String(value).trim());
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Gain-only filter chain. No LRA compressor.
+ * Returns undefined when the file is already at target and peaks are safe,
+ * or when integrated loudness cannot be measured (silence).
+ */
+export function buildNormalizeAf(
+  inputI: number | null,
+  inputTp: number | null,
+): string | undefined {
+  if (inputI == null) return undefined;
+
+  const gainDb = TARGET_I - inputI;
+  const filters: string[] = [];
+  if (Math.abs(gainDb) >= 0.05) {
+    filters.push(`volume=${gainDb.toFixed(2)}dB`);
+  }
+
+  const predictedTp = inputTp == null ? null : inputTp + gainDb;
+  if (predictedTp != null && predictedTp > TARGET_TP) {
+    filters.push(
+      `alimiter=limit=${TARGET_TP_LINEAR.toFixed(6)}:level=false:attack=7:release=100`,
+    );
+  }
+
+  return filters.length ? filters.join(",") : undefined;
 }
 
 /**
@@ -90,7 +131,7 @@ export async function normalizeToMinus16LufsMp3(
       "-i",
       inputPath,
       "-af",
-      `loudnorm=I=${TARGET_I}:TP=${TARGET_TP}:LRA=${TARGET_LRA}:print_format=json`,
+      `loudnorm=I=${TARGET_I}:TP=${TARGET_TP}:print_format=json`,
       "-f",
       "null",
       "-",
@@ -113,22 +154,17 @@ export async function normalizeToMinus16LufsMp3(
       throw err;
     }
 
-    const apply = await spawnCapture("ffmpeg", [
+    const af = buildNormalizeAf(
+      parseLoudnormNumber(measured.input_i),
+      parseLoudnormNumber(measured.input_tp),
+    );
+
+    const applyArgs = [
       "-hide_banner",
       "-y",
       "-i",
       inputPath,
-      "-af",
-      [
-        `loudnorm=I=${TARGET_I}:TP=${TARGET_TP}:LRA=${TARGET_LRA}`,
-        `measured_I=${measured.input_i}`,
-        `measured_TP=${measured.input_tp}`,
-        `measured_LRA=${measured.input_lra}`,
-        `measured_thresh=${measured.input_thresh}`,
-        `offset=${measured.target_offset}`,
-        "linear=true",
-        "print_format=summary",
-      ].join(":"),
+      ...(af ? (["-af", af] as const) : []),
       "-ar",
       "44100",
       "-ac",
@@ -138,7 +174,9 @@ export async function normalizeToMinus16LufsMp3(
       "-b:a",
       MP3_BITRATE,
       outputPath,
-    ]);
+    ];
+
+    const apply = await spawnCapture("ffmpeg", applyArgs);
 
     if (apply.code !== 0) {
       const detail = apply.stderr.trim().split("\n").slice(-4).join(" ");
