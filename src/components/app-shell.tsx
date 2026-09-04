@@ -1,7 +1,11 @@
 import { Suspense, type ReactNode } from "react";
 import { AppNav } from "@/components/app-nav";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
-import { canManageCatalog, getSession, isSiteAdmin } from "@/lib/auth";
+import { canManageCatalog, getSession, isSiteAdmin, isSubscriber } from "@/lib/auth";
+import {
+  countPendingLicenseRequests,
+  countUnseenAcceptedLicenseRequests,
+} from "@/lib/license-requests";
 import { countPendingApprovals } from "@/lib/pending-approval-count";
 import { getAvailableCount, getTrackCount } from "@/lib/queries";
 
@@ -28,9 +32,15 @@ export async function AppShell({
   const session = isGuest ? null : await getSession();
   const staff = !isGuest && canManageCatalog(session);
   const siteAdmin = !isGuest && isSiteAdmin(session);
+  const subscriber = !isGuest && isSubscriber(session);
   const availableCount = !isGuest && showCounts ? getAvailableCount() : undefined;
   const totalCount = !isGuest && showCounts && staff ? getTrackCount() : undefined;
   const pendingUserCount = siteAdmin ? countPendingApprovals() : 0;
+  const pendingLicenseCount = staff ? countPendingLicenseRequests() : 0;
+  const unseenAcceptedLicenseCount =
+    subscriber && session?.user?.id
+      ? countUnseenAcceptedLicenseRequests(session.user.id)
+      : 0;
 
   return (
     <div className="flex h-full min-h-0 flex-col lg:h-auto lg:min-h-[100dvh] lg:flex-row">
@@ -39,12 +49,15 @@ export async function AppShell({
           mode={mode}
           canManageAccount={siteAdmin}
           canManageCatalog={Boolean(staff)}
+          isSubscriber={Boolean(subscriber)}
           userEmail={session?.user?.email}
           userName={session?.user?.name}
           userImage={session?.user?.image}
           availableCount={availableCount}
           totalCount={totalCount}
           pendingUserCount={pendingUserCount}
+          pendingLicenseCount={pendingLicenseCount}
+          unseenAcceptedLicenseCount={unseenAcceptedLicenseCount}
         />
       </Suspense>
       <div className="flex min-w-0 flex-1 flex-col pt-[var(--mobile-chrome-top)] pb-[var(--mobile-chrome-bottom)] lg:flex-row lg:pt-0 lg:pb-[var(--bottom-player-height,0px)]">

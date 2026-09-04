@@ -7,11 +7,20 @@ import * as schema from "./schema";
 
 const fullSchema = { ...schema, ...authSchema };
 
-const dataDir = path.join(process.cwd(), "data");
+/** Prefer ATTIC_DATA_DIR; otherwise Application-root `data/` (cwd pinned in app.js). */
+const dataDir = (() => {
+  const fromEnv = String(process.env["ATTIC_DATA_DIR"] || "").trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  return path.join(process.cwd(), "data");
+})();
 const dbPath = path.join(dataDir, "attic.db");
 
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
+}
+
+if (process.env.NODE_ENV === "production") {
+  console.log(`[audio-attic] sqlite ${dbPath} (cwd=${process.cwd()})`);
 }
 
 const sqlite = new Database(dbPath);
@@ -809,4 +818,4 @@ CREATE INDEX IF NOT EXISTS track_audio_assets_track_kind_idx ON track_audio_asse
 }
 
 export const db = drizzle(sqlite, { schema: fullSchema });
-export { sqlite };
+export { sqlite, dbPath, dataDir };

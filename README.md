@@ -19,7 +19,8 @@ Open [http://localhost:3000](http://localhost:3000).
 ## Production (cPanel Node.js)
 
 No-SSH install and update playbook: **[docs/INSTALL-AND-UPDATE.md](docs/INSTALL-AND-UPDATE.md)**.  
-Shorter hosting notes: **[docs/CPANEL.md](docs/CPANEL.md)**.
+Shorter hosting notes: **[docs/CPANEL.md](docs/CPANEL.md)**.  
+Partner search API (Clear tracks, other sites): **[docs/CATALOG-PARTNER-API.md](docs/CATALOG-PARTNER-API.md)**.
 
 Summary: Node **20+**, Application root = folder with `package.json`, startup file = **`app.js`**, set `BETTER_AUTH_URL` to your HTTPS subdomain, then `npm run build` and Restart.
 

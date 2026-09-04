@@ -92,7 +92,7 @@ export function MailSettingsForm({
   return (
     <div className="max-w-xl space-y-6">
       <p className="text-sm text-[var(--ink-dim)]">
-        Playlist shares use{" "}
+        Playlist shares and staff license-request alerts use{" "}
         <a
           href="https://resend.com"
           target="_blank"
@@ -102,7 +102,8 @@ export function MailSettingsForm({
           Resend
         </a>
         . On the free plan you can only send to your Resend account email until you verify a
-        domain. Then set From to an address on that domain.
+        domain. Then set From to an address on that domain. Until a key is set, license
+        requests still save — alerts are logged on the server instead of emailed.
       </p>
 
       <form onSubmit={onSave} className="space-y-4 rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)]/70 p-5">

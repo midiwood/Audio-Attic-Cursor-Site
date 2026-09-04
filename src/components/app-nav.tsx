@@ -18,6 +18,8 @@ type NavItem = {
   href: string;
   label: string;
   match?: (pathname: string) => boolean;
+  badge?: number;
+  badgeLabel?: string;
 };
 
 /** Catalog shelves — browse the collection */
@@ -93,6 +95,27 @@ function IconAdmin({ className }: { className?: string }) {
   );
 }
 
+/** License / deal paperwork */
+function IconLicenses({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M7 3.75h7.5L19 8.25v12a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 20.25v-15A1.5 1.5 0 0 1 7 3.75Z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path d="M14.5 3.75V8.25H19" stroke="currentColor" strokeWidth="1.75" strokeLinejoin="round" />
+      <path
+        d="M8.5 12.5h7M8.5 16h5"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
 function IconBrandMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -111,6 +134,7 @@ function IconBrandMark({ className }: { className?: string }) {
 const ICONS: Record<string, (props: { className?: string }) => ReactNode> = {
   Browse: IconBrowse,
   Playlists: IconPlaylists,
+  Licenses: IconLicenses,
   Upload: IconUpload,
   Admin: IconAdmin,
 };
@@ -160,22 +184,28 @@ function setNavWidthVar(open: boolean) {
 export function AppNav({
   canManageAccount,
   canManageCatalog = true,
+  isSubscriber = false,
   userEmail,
   userName,
   userImage,
   availableCount,
   totalCount,
   pendingUserCount = 0,
+  pendingLicenseCount = 0,
+  unseenAcceptedLicenseCount = 0,
   mode = "app",
 }: {
   canManageAccount: boolean;
   canManageCatalog?: boolean;
+  isSubscriber?: boolean;
   userEmail?: string | null;
   userName?: string | null;
   userImage?: string | null;
   availableCount?: number;
   totalCount?: number;
   pendingUserCount?: number;
+  pendingLicenseCount?: number;
+  unseenAcceptedLicenseCount?: number;
   mode?: "app" | "guest";
 }) {
   const pathname = usePathname();
@@ -246,6 +276,21 @@ export function AppNav({
       label: "Upload",
       match: (p) => p === "/admin" || p.startsWith("/admin/tracks"),
     });
+    items.push({
+      href: "/admin/licensing",
+      label: "Licenses",
+      match: (p) => p === "/admin/licensing" || p.startsWith("/admin/licensing/"),
+      badge: pendingLicenseCount,
+      badgeLabel: "pending license requests",
+    });
+  } else if (!isGuest && isSubscriber) {
+    items.push({
+      href: "/licenses",
+      label: "Licenses",
+      match: (p) => p === "/licenses" || p.startsWith("/licenses/"),
+      badge: unseenAcceptedLicenseCount,
+      badgeLabel: "accepted licenses to review",
+    });
   }
 
   if (!isGuest && canManageAccount) {
@@ -255,7 +300,11 @@ export function AppNav({
       match: (p) =>
         p.startsWith("/admin/site") ||
         p.startsWith("/admin/users") ||
-        p.startsWith("/admin/settings"),
+        p.startsWith("/admin/settings") ||
+        p.startsWith("/admin/composers") ||
+        p.startsWith("/admin/samro"),
+      badge: pendingUserCount,
+      badgeLabel: "pending user requests",
     });
   }
 
@@ -315,10 +364,12 @@ export function AppNav({
           const active = item.match ? item.match(pathname) : pathname === item.href;
           const clickPending = pendingHref === item.href;
           const Icon = ICONS[item.label];
-          const showPendingBadge = item.label === "Admin" && pendingUserCount > 0;
+          const badge = item.badge ?? 0;
+          const showPendingBadge = badge > 0;
+          const badgeAria = `${badge} ${item.badgeLabel || "pending"}`;
           return (
             <Link
-              key={item.label}
+              key={`${item.label}:${item.href}`}
               href={item.href}
               title={collapsed ? item.label : undefined}
               onClick={() => {
@@ -346,16 +397,16 @@ export function AppNav({
                   {showPendingBadge ? (
                     <span
                       className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[var(--exclusive)] px-1.5 text-[10px] font-semibold tabular-nums text-white"
-                      aria-label={`${pendingUserCount} pending`}
+                      aria-label={badgeAria}
                     >
-                      {pendingUserCount > 99 ? "99+" : pendingUserCount}
+                      {badge > 99 ? "99+" : badge}
                     </span>
                   ) : null}
                 </>
               ) : showPendingBadge ? (
                 <span
                   className="absolute right-0.5 top-0.5 h-2 w-2 rounded-full bg-[var(--exclusive)]"
-                  aria-label={`${pendingUserCount} pending`}
+                  aria-label={badgeAria}
                 />
               ) : null}
             </Link>

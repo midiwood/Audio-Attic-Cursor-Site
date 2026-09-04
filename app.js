@@ -28,6 +28,14 @@ if (!fs.existsSync(nextDir) || !fs.existsSync(buildIdPath)) {
   process.exit(1);
 }
 
+// Passenger/cPanel may start Node with cwd ≠ Application root. SQLite and .env*
+// resolve via process.cwd() — pin cwd to this file's directory.
+try {
+  process.chdir(dir);
+} catch (err) {
+  console.error("[audio-attic] chdir to application root failed", dir, err);
+}
+
 process.env.NODE_ENV = process.env.NODE_ENV || "production";
 
 const hostname = process.env.HOSTNAME || "0.0.0.0";

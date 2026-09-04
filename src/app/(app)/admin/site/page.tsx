@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { requireSiteAdmin } from "@/lib/auth";
+import { countPendingLicenseRequests } from "@/lib/license-requests";
 import { countPendingApprovals } from "@/lib/pending-approval-count";
+import { countTracks, getTrackCount } from "@/lib/queries";
 import {
   getAiRuntimeConfig,
   getMailRuntimeConfig,
@@ -27,10 +29,18 @@ export default async function AdminSitePage() {
   const mail = getMailRuntimeConfig();
   const publisher = getPublisherRuntimeConfig();
   const pendingUsers = countPendingApprovals();
+  const pendingLicenses = countPendingLicenseRequests();
   const aiReady = Boolean(ai.geminiApiKey);
   const spacesReady = Boolean(spaces.key && spaces.secret && spaces.bucket && spaces.region);
   const mailReady = Boolean(mail.apiKey);
   const publisherReady = Boolean(publisher.houseName);
+
+  const trackTotal = getTrackCount();
+  const partnerClear = countTracks({ license: "clear" });
+  const library = countTracks({ license: "library" });
+  const exclusive = countTracks({ license: "exclusive" });
+  const hold = countTracks({ license: "hold" });
+  const personal = countTracks({ license: "personal" });
 
   const cards = [
     {
@@ -39,6 +49,13 @@ export default async function AdminSitePage() {
       description: "Add, remove, and set roles for people who use Audio Attic.",
       meta: null as string | null,
       badge: pendingUsers,
+    },
+    {
+      href: "/admin/licensing",
+      title: "Licensing",
+      description: "Client license requests — accept to log a deal, decline, or archive.",
+      meta: null as string | null,
+      badge: pendingLicenses,
     },
     {
       href: "/admin/composers",
@@ -91,7 +108,7 @@ export default async function AdminSitePage() {
     {
       href: "/admin/settings/email",
       title: "Email",
-      description: "Resend for playlist share invites.",
+      description: "Resend for playlist invites and license-request alerts.",
       meta: statusLabel(mailReady, settingSource(SETTINGS.RESEND_API_KEY)),
       badge: 0,
     },
@@ -108,6 +125,28 @@ export default async function AdminSitePage() {
         </p>
       </header>
 
+      <section className="mb-6 max-w-3xl rounded-xl border border-[var(--line)] bg-[var(--bg-elevated)]/70 p-5">
+        <h2 className="text-sm font-medium text-[var(--ink)]">License inventory (this server)</h2>
+        <p className="mt-1 text-sm text-[var(--ink-dim)]">
+          Partner / QueSunc search only returns Clear.
+          {partnerClear === 0
+            ? " Right now Clear is 0 — mark tracks Clear on Browse (edit → License = Clear → save), then refresh QueSunc."
+            : ` ${partnerClear} Clear track${partnerClear === 1 ? "" : "s"} are available to partners.`}
+        </p>
+        <p className="mt-3 text-sm tabular-nums text-[var(--ink)]">
+          {trackTotal} active · Clear {partnerClear} · Library {library} · Exclusive{" "}
+          {exclusive} · On Hold {hold} · Personal {personal}
+        </p>
+        <p className="mt-2">
+          <Link
+            href="/?license=clear"
+            className="text-sm text-[var(--accent)] underline-offset-2 hover:underline"
+          >
+            Browse Clear tracks
+          </Link>
+        </p>
+      </section>
+
       <ul className="grid max-w-3xl gap-3 sm:grid-cols-2">
         {cards.map((card) => (
           <li key={card.title}>
@@ -121,7 +160,11 @@ export default async function AdminSitePage() {
                   {card.badge > 0 ? (
                     <span
                       className="grid h-5 min-w-5 place-items-center rounded-full bg-[var(--exclusive)] px-1.5 text-[10px] font-semibold tabular-nums text-white"
-                      aria-label={`${card.badge} pending user request${card.badge === 1 ? "" : "s"}`}
+                      aria-label={
+                        card.title === "Licensing"
+                          ? `${card.badge} pending license request${card.badge === 1 ? "" : "s"}`
+                          : `${card.badge} pending user request${card.badge === 1 ? "" : "s"}`
+                      }
                     >
                       {card.badge > 99 ? "99+" : card.badge}
                     </span>

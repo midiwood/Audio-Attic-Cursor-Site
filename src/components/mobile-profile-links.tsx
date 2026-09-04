@@ -78,12 +78,19 @@ export function MobileProfileLinks({
       </h2>
       <div className="space-y-2">
         {canManageCatalog ? (
-          <LinkRow href="/admin" label="Upload" description="Add tracks to the catalog" />
+          <>
+            <LinkRow href="/admin" label="Upload" description="Add tracks to the catalog" />
+            <LinkRow
+              href="/admin/licensing"
+              label="Licenses"
+              description="Client license requests"
+            />
+          </>
         ) : null}
         {canManageAccount ? (
           <LinkRow href="/admin/site" label="Admin" description="Site settings and users" />
         ) : null}
-        {isSubscriber ? (
+        {isSubscriber && !canManageCatalog ? (
           <LinkRow href="/licenses" label="Licenses" description="Your license requests" />
         ) : null}
         <button

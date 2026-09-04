@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import { user } from "@/db/auth-schema";
+import { tracks } from "@/db/schema";
 import { getApiSession, isSubscriber } from "@/lib/auth";
 import { createLicenseRequest } from "@/lib/license-requests";
+import { sendLicenseRequestNotifyEmail } from "@/lib/mail";
+import { formatDisplayTitle } from "@/lib/tracks";
 
 export async function POST(
   req: NextRequest,
@@ -40,6 +46,22 @@ export async function POST(
       { status: result.status || 400 },
     );
   }
+
+  const track =
+    db.select().from(tracks).where(eq(tracks.id, result.request.trackId)).get() ?? null;
+  const requester =
+    db.select().from(user).where(eq(user.id, result.request.userId)).get() ?? null;
+
+  void sendLicenseRequestNotifyEmail({
+    trackId: result.request.trackId,
+    trackTitle: track ? formatDisplayTitle(track) : result.request.trackId,
+    requesterName: requester?.name || session.user.name || "",
+    requesterEmail: requester?.email || session.user.email || "",
+    scopeSummary: result.request.scope,
+    intendedUse: result.request.intendedUse,
+  }).catch((err) => {
+    console.error("[mail] license request notify error", err);
+  });
 
   return NextResponse.json({
     request: {

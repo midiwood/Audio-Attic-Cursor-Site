@@ -418,16 +418,17 @@ function buildWhere(filters: TrackFilters): SQL | undefined {
       )!,
     );
   } else if (filters.license === "clear") {
+    // Match normalizeLicenseStatus() === "clear": case/whitespace insensitive,
+    // unknowns default to Clear in the UI — but never Library / Exclusive / Hold / Personal.
     clauses.push(
-      or(
-        eq(tracks.license, "Clear"),
-        eq(tracks.license, "None [Available]"),
-        sql`(${tracks.license} IS NULL OR ${tracks.license} = '')`,
-        and(
-          like(tracks.license, "%[Available]%"),
-          sql`${tracks.license} != 'Library [Available]'`,
-        )!,
-      )!,
+      sql`lower(trim(coalesce(${tracks.license}, ''))) NOT IN (
+        'library',
+        'library [available]',
+        'exclusive',
+        'on hold',
+        'hold',
+        'personal'
+      )`,
     );
   } else if (filters.license === "library") {
     clauses.push(
