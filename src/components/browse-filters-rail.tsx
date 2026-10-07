@@ -29,6 +29,7 @@ export function BrowseFiltersRail({ children }: { children: ReactNode }) {
     const capasso = params.get("capasso");
     if (capasso === "yes" || capasso === "no" || capasso === "prepare") count += 1;
     if (params.get("year")) count += 1;
+    if (params.get("publisher")) count += 1;
     for (const key of ["genre", "mood", "instrument", "attribute"]) {
       count += countListParam(params, key);
     }

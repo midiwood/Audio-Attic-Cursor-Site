@@ -22,6 +22,7 @@ import {
   toDropboxDlUrl,
 } from "@/lib/tracks";
 import { getHousePublisherName, isSubscriberVisible } from "@/lib/publisher";
+import { parsePublisherNames } from "@/lib/publisher-shared";
 import { getCatalogVocabulary } from "@/lib/vocabulary";
 import { DEFAULT_CATALOG_SORT, defaultSortDir } from "@/lib/catalog-sort";
 
@@ -36,6 +37,8 @@ export type TrackFilters = {
   samro?: "yes" | "no" | "prepare" | "all";
   /** Staff-only: Capasso SWI. `prepare` = house-published Library/Exclusive/On Hold ∩ not submitted. */
   capasso?: "yes" | "no" | "prepare" | "all";
+  /** Staff-only: publisher name (co-publishers counted separately), or `none` for blank. */
+  publisher?: string;
   year?: number[];
   bpmMin?: number;
   bpmMax?: number;
@@ -206,6 +209,14 @@ export function getFilterOptions() {
       .all()
       .map((y) => y.year!)
       .filter(Boolean),
+    publishers: uniqueSortedStrings(
+      db
+        .selectDistinct({ value: tracks.publisher })
+        .from(tracks)
+        .where(and(isNull(tracks.trashedAt), sql`trim(coalesce(${tracks.publisher}, '')) != ''`))
+        .all()
+        .flatMap((row) => parsePublisherNames(row.value)),
+    ),
   };
 }
 
@@ -282,6 +293,7 @@ export function getFacetOptions(filters: TrackFilters = {}) {
   const forInstruments = queryTracks({ ...filters, instrument: undefined, sort: "title" });
   const forUsages = queryTracks({ ...filters, attribute: undefined, sort: "title" });
   const forYears = queryTracks({ ...filters, year: undefined, sort: "title" });
+  const forPublishers = queryTracks({ ...filters, publisher: undefined, sort: "title" });
   const forLicense = queryTracks({ ...filters, license: "all", sort: "title" });
 
   let clear = false;
@@ -304,6 +316,10 @@ export function getFacetOptions(filters: TrackFilters = {}) {
     instruments: uniqueSortedStrings(forInstruments.flatMap((t) => splitTags(t.instruments))),
     usages: uniqueSortedStrings(forUsages.flatMap((t) => splitTags(t.attributes))),
     years: uniqueSortedYears(forYears.map((t) => t.year)),
+    publishers: uniqueSortedStrings(
+      forPublishers.flatMap((t) => parsePublisherNames(t.publisher)),
+    ),
+    publisherNone: forPublishers.some((t) => !(t.publisher || "").trim()),
     licenses: {
       clear,
       library,
@@ -341,6 +357,10 @@ export function sanitizeFilters(filters: TrackFilters): TrackFilters {
   if (next.year?.length) {
     next.year = next.year.filter((y) => years.includes(y));
     if (!next.year.length) next.year = undefined;
+  }
+  if (next.publisher !== undefined) {
+    const publisher = next.publisher.trim();
+    next.publisher = publisher || undefined;
   }
 
   return next;
@@ -404,6 +424,30 @@ function buildWhere(filters: TrackFilters): SQL | undefined {
 
   if (filters.year?.length) {
     clauses.push(inArray(tracks.year, filters.year));
+  }
+
+  if (filters.publisher === "none") {
+    clauses.push(sql`trim(coalesce(${tracks.publisher}, '')) = ''`);
+  } else if (filters.publisher?.trim()) {
+    const name = filters.publisher.trim().toLowerCase();
+    const token = `,${name},`;
+    clauses.push(
+      sql`(
+        lower(trim(coalesce(${tracks.publisher}, ''))) = ${name}
+        OR instr(
+          ',' || replace(replace(replace(replace(replace(replace(
+            lower(coalesce(${tracks.publisher}, '')),
+            ', ', ','),
+            ' / ', ','),
+            ' & ', ','),
+            '|', ','),
+            ';', ','),
+            ' and ', ',')
+          || ',',
+          ${token}
+        ) > 0
+      )`,
+    );
   }
 
   if (filters.bpmMin !== undefined) {

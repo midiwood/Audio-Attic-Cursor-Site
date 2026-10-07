@@ -29,6 +29,7 @@ type Options = {
   instruments: string[];
   usages: string[];
   years: number[];
+  publishers: string[];
 };
 
 type Available = {
@@ -37,6 +38,8 @@ type Available = {
   instruments: string[];
   usages: string[];
   years: number[];
+  publishers: string[];
+  publisherNone: boolean;
   licenses: {
     clear: boolean;
     library: boolean;
@@ -144,7 +147,7 @@ function MultiFacetField({
 }
 
 type SelectedChip = {
-  key: "license" | "samro" | "capasso" | "genre" | "mood" | "instrument" | "attribute";
+  key: "license" | "samro" | "capasso" | "publisher" | "genre" | "mood" | "instrument" | "attribute";
   value: string;
   tone?: TagTone;
 };
@@ -159,6 +162,7 @@ export function CatalogFilters({
   hideLicenseFilter = false,
   showSamroFilter = false,
   showYearFilter = false,
+  showPublisherFilter = false,
 }: {
   options: Options;
   available: Available;
@@ -169,6 +173,8 @@ export function CatalogFilters({
   showSamroFilter?: boolean;
   /** Staff-only: filter by year. */
   showYearFilter?: boolean;
+  /** Staff-only: filter by publisher, including blank. */
+  showPublisherFilter?: boolean;
 }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -215,6 +221,7 @@ export function CatalogFilters({
       instruments: new Set(available.instruments),
       usages: new Set(available.usages),
       years: new Set(available.years.map(String)),
+      publishers: new Set(available.publishers),
     }),
     [available],
   );
@@ -224,6 +231,7 @@ export function CatalogFilters({
   const instrumentValues = useMemo(() => readListParam(params, "instrument"), [params]);
   const usageValues = useMemo(() => readListParam(params, "attribute"), [params]);
   const yearValue = params.get("year") ?? "";
+  const publisherValue = params.get("publisher") ?? "";
   const licenseValue = params.get("license") ?? "all";
   const samroValue = params.get("samro") ?? "all";
   const capassoValue = params.get("capasso") ?? "all";
@@ -261,13 +269,15 @@ export function CatalogFilters({
       moodValues.length > 0 ||
       instrumentValues.length > 0 ||
       usageValues.length > 0 ||
-      Boolean(showYearFilter && yearValue)
+      Boolean(showYearFilter && yearValue) ||
+      Boolean(showPublisherFilter && publisherValue)
     );
   }, [
     params,
     hideLicenseFilter,
     showSamroFilter,
     showYearFilter,
+    showPublisherFilter,
     licenseValue,
     samroValue,
     capassoValue,
@@ -276,6 +286,7 @@ export function CatalogFilters({
     instrumentValues,
     usageValues,
     yearValue,
+    publisherValue,
   ]);
 
   const pushParams = useCallback(
@@ -305,6 +316,7 @@ export function CatalogFilters({
         (key === "license" && value === "all") ||
         (key === "samro" && value === "all") ||
         (key === "capasso" && value === "all") ||
+        (key === "publisher" && value === "all") ||
         (key === "sort" && value === "date")
       ) {
         next.delete(key);
@@ -366,6 +378,13 @@ export function CatalogFilters({
   const fieldClass = "catalog-filter-field";
 
   const yearItems = useMemo(() => options.years.map(String), [options.years]);
+  const publisherItems = useMemo(() => {
+    const names = [...options.publishers];
+    if (publisherValue && publisherValue !== "none" && !names.includes(publisherValue)) {
+      names.push(publisherValue);
+    }
+    return names.sort((a, b) => a.localeCompare(b));
+  }, [options.publishers, publisherValue]);
 
   const selectedChips = useMemo((): SelectedChip[] => {
     const chips: SelectedChip[] = [];
@@ -397,8 +416,13 @@ export function CatalogFilters({
       chips.push({ key: "capasso", value: "Capasso submitted" });
     } else if (showSamroFilter && capassoValue === "no") {
       chips.push({ key: "capasso", value: "Capasso not submitted" });
-    } else if (showSamroFilter && capassoValue === "prepare") {
+    } else     if (showSamroFilter && capassoValue === "prepare") {
       chips.push({ key: "capasso", value: "Capasso Prepare" });
+    }
+    if (showPublisherFilter && publisherValue === "none") {
+      chips.push({ key: "publisher", value: "No publisher" });
+    } else if (showPublisherFilter && publisherValue) {
+      chips.push({ key: "publisher", value: publisherValue });
     }
     for (const value of genreValues) chips.push({ key: "genre", value, tone: "genre" });
     for (const value of moodValues) chips.push({ key: "mood", value, tone: "mood" });
@@ -410,9 +434,11 @@ export function CatalogFilters({
   }, [
     hideLicenseFilter,
     showSamroFilter,
+    showPublisherFilter,
     licenseValue,
     samroValue,
     capassoValue,
+    publisherValue,
     genreValues,
     moodValues,
     instrumentValues,
@@ -431,6 +457,10 @@ export function CatalogFilters({
       }
       if (chip.key === "capasso") {
         update("capasso", "all");
+        return;
+      }
+      if (chip.key === "publisher") {
+        update("publisher", "");
         return;
       }
       const current =
@@ -571,6 +601,39 @@ export function CatalogFilters({
                 </select>
               </FilterRow>
             )}
+
+            {showPublisherFilter ? (
+              <FilterRow label="Publisher">
+                <select
+                  className={`catalog-filter-select ${fieldClass}`}
+                  value={publisherValue}
+                  onChange={(e) => update("publisher", e.target.value)}
+                  title="Filter by publisher"
+                >
+                  <option value="">All publishers</option>
+                  <option
+                    value="none"
+                    disabled={!available.publisherNone && publisherValue !== "none"}
+                  >
+                    {available.publisherNone || publisherValue === "none"
+                      ? "None"
+                      : "None · none"}
+                  </option>
+                  {publisherItems.map((name) => {
+                    const isAvailable = availableSets.publishers.has(name);
+                    return (
+                      <option
+                        key={name}
+                        value={name}
+                        disabled={!isAvailable && publisherValue !== name}
+                      >
+                        {isAvailable || publisherValue === name ? name : `${name} · none`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </FilterRow>
+            ) : null}
 
             {showSamroFilter ? (
               <FilterRow

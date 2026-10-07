@@ -78,6 +78,7 @@ export function parseCatalogFilters(
       : "all") as TrackFilters["license"],
     samro: parseSamroFilter(get("samro")),
     capasso: parseCapassoFilter(get("capasso")),
+    publisher: get("publisher")?.trim() || undefined,
     year: Number.isFinite(yearNum) ? [yearNum] : undefined,
     sort,
     sortDir,
@@ -100,6 +101,7 @@ export function catalogFiltersToQuery(filters: TrackFilters): string {
   if (filters.license && filters.license !== "all") next.set("license", filters.license);
   if (filters.samro && filters.samro !== "all") next.set("samro", filters.samro);
   if (filters.capasso && filters.capasso !== "all") next.set("capasso", filters.capasso);
+  if (filters.publisher) next.set("publisher", filters.publisher);
   setListParam(next, "genre", filters.genre);
   setListParam(next, "mood", filters.mood);
   setListParam(next, "instrument", filters.instrument);

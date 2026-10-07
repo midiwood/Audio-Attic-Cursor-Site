@@ -2,6 +2,23 @@
 
 import { isAvailableLicense, normalizeLicenseStatus } from "@/lib/tracks";
 
+/** Split a catalog publisher field into individual names. */
+export function parsePublisherNames(publisher: string | null | undefined): string[] {
+  const text = (publisher || "").trim();
+  if (!text) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of text.split(/\s*(?:,|;|\||\s+and\s+|\s*&\s*|\s+\/\s+)\s*/i)) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+  }
+  return out;
+}
+
 /**
  * Track publisher equals House publisher (trim, case-insensitive).
  * Pass `houseName` from the server when calling from client components.
