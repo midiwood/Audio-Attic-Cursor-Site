@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   }
   if (!staff) {
     filters.samro = undefined;
+    filters.capasso = undefined;
     filters.year = undefined;
   }
 
@@ -39,7 +40,7 @@ export async function GET(req: NextRequest) {
   const total = countTracks(filters);
   const rows = queryTracksPage(filters, { limit, offset });
   let trackItems = rows.map(toTrackListItem);
-  if (staff && filters.samro === "prepare") {
+  if (staff && (filters.samro === "prepare" || filters.capasso === "prepare")) {
     trackItems = attachSamroComposerSlots(trackItems, getSamroProProfileFromSiteSettings());
   }
   const ids = rows.map((track) => track.id);

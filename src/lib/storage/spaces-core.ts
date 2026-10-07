@@ -1,6 +1,7 @@
 import {
   CopyObjectCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
   ListObjectsV2Command,
@@ -250,7 +251,107 @@ export async function deleteObject(key: string): Promise<void> {
   );
 }
 
-export async function copyObject(fromKey: string, toKey: string): Promise<void> {
+/** List all object keys under a prefix (paginated). */
+export async function listObjectKeys(prefix: string): Promise<string[]> {
+  const normalized = prefix.trim();
+  if (!normalized) return [];
+  const runtime = getSpacesRuntimeConfig();
+  const client = getClient();
+  const keys: string[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const res = await client.send(
+      new ListObjectsV2Command({
+        Bucket: runtime.bucket,
+        Prefix: normalized,
+        ContinuationToken: continuationToken,
+        MaxKeys: 1000,
+      }),
+    );
+    for (const obj of res.Contents || []) {
+      const key = String(obj.Key || "").trim();
+      if (key) keys.push(key);
+    }
+    continuationToken = res.IsTruncated ? res.NextContinuationToken : undefined;
+  } while (continuationToken);
+
+  return keys;
+}
+
+export type DeleteByPrefixResult = {
+  deletedKeys: string[];
+  errors: string[];
+};
+
+/** List then delete every object under prefix. Soft-fails per batch/key. */
+export async function deleteObjectsByPrefix(prefix: string): Promise<DeleteByPrefixResult> {
+  const deletedKeys: string[] = [];
+  const errors: string[] = [];
+
+  let keys: string[];
+  try {
+    keys = await listObjectKeys(prefix);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`list ${prefix}: ${msg}`);
+    return { deletedKeys, errors };
+  }
+
+  if (!keys.length) return { deletedKeys, errors };
+
+  const runtime = getSpacesRuntimeConfig();
+  const client = getClient();
+  const chunkSize = 1000;
+
+  for (let i = 0; i < keys.length; i += chunkSize) {
+    const chunk = keys.slice(i, i + chunkSize);
+    try {
+      const res = await client.send(
+        new DeleteObjectsCommand({
+          Bucket: runtime.bucket,
+          Delete: {
+            Objects: chunk.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        }),
+      );
+      const failed = new Set(
+        (res.Errors || [])
+          .map((e) => String(e.Key || "").trim())
+          .filter(Boolean),
+      );
+      for (const err of res.Errors || []) {
+        errors.push(
+          `delete ${err.Key || "?"}: ${err.Code || ""} ${err.Message || "failed"}`.trim(),
+        );
+      }
+      for (const key of chunk) {
+        if (!failed.has(key)) deletedKeys.push(key);
+      }
+    } catch (err) {
+      for (const key of chunk) {
+        try {
+          await deleteObject(key);
+          deletedKeys.push(key);
+        } catch (singleErr) {
+          const msg = singleErr instanceof Error ? singleErr.message : String(singleErr);
+          errors.push(`delete ${key}: ${msg}`);
+        }
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      errors.push(`batch delete ${prefix}: ${msg}`);
+    }
+  }
+
+  return { deletedKeys, errors };
+}
+
+export async function copyObject(
+  fromKey: string,
+  toKey: string,
+  contentType = "audio/mpeg",
+): Promise<void> {
   const runtime = getSpacesRuntimeConfig();
   const client = getClient();
   await client.send(
@@ -259,9 +360,30 @@ export async function copyObject(fromKey: string, toKey: string): Promise<void> 
       CopySource: `${runtime.bucket}/${fromKey}`,
       Key: toKey,
       ACL: "private",
-      ContentType: "audio/mpeg",
+      ContentType: contentType,
+      MetadataDirective: "REPLACE",
     }),
   );
+}
+
+export async function presignPutUrl(
+  key: string,
+  contentType: string,
+  expiresInSec?: number,
+): Promise<string> {
+  const runtime = getSpacesRuntimeConfig();
+  const client = getClient();
+  const expiresIn = Math.max(
+    60,
+    Math.min(60 * 60, expiresInSec ?? (Number(runtime.presignTtlSec) || 3600)),
+  );
+  const command = new PutObjectCommand({
+    Bucket: runtime.bucket,
+    Key: key,
+    ContentType: contentType,
+    ACL: "private",
+  });
+  return getSignedUrl(client, command, { expiresIn });
 }
 
 export async function headObject(

@@ -302,7 +302,8 @@ export function AppNav({
         p.startsWith("/admin/users") ||
         p.startsWith("/admin/settings") ||
         p.startsWith("/admin/composers") ||
-        p.startsWith("/admin/samro"),
+        p.startsWith("/admin/samro") ||
+        p.startsWith("/admin/capasso"),
       badge: pendingUserCount,
       badgeLabel: "pending user requests",
     });

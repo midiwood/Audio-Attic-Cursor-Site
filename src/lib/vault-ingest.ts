@@ -2,10 +2,13 @@
  * Orchestrate normalize → DigitalOcean Spaces vault upload.
  * Prepare/AI stage uploads under vault/_tmp/{stagingId}/.
  * Confirmed import promotes into vault/{trackId}/.
+ *
+ * Default: client (browser) already normalized MP3 + optional master.
+ * Server ffmpeg path is muted unless AUDIO_NORMALIZE_MODE=server.
  */
 
 import { randomBytes } from "crypto";
-import { normalizeToMinus16LufsMp3 } from "@/lib/audio-normalize";
+import { normalizeToMinus16LufsMp3, resolveAudioNormalizeMode } from "@/lib/audio-normalize";
 import {
   isVaultStagingKey,
   promoteVaultStaging,
@@ -17,6 +20,10 @@ export type VaultIngestInput = {
   trackId: string;
   sourceBytes?: Buffer | null;
   sourceHint?: string | null;
+  /** Already −16 LUFS MP3 from browser wasm (preferred). */
+  preNormalizedMp3?: Buffer | null;
+  masterBytes?: Buffer | null;
+  masterHint?: string | null;
 };
 
 export type VaultIngestResult = {
@@ -25,12 +32,16 @@ export type VaultIngestResult = {
   dropboxDl: string | null;
   sourceDropboxPath: string | null;
   sourceFolderLink: string | null;
+  masterObjectKey?: string | null;
 };
 
 export type VaultStageInput = {
   stagingId?: string | null;
   sourceBytes?: Buffer | null;
   sourceHint?: string | null;
+  preNormalizedMp3?: Buffer | null;
+  masterBytes?: Buffer | null;
+  masterHint?: string | null;
 };
 
 export type VaultStageResult = VaultIngestResult & {
@@ -55,11 +66,38 @@ async function resolveSourceBytes(input: {
   return { sourceBytes, hint };
 }
 
-export async function stageTrackToVault(input: VaultStageInput): Promise<VaultStageResult> {
-  const stagingId = input.stagingId?.trim() || newStagingId();
+async function resolveMp3Bytes(input: {
+  sourceBytes?: Buffer | null;
+  sourceHint?: string | null;
+  preNormalizedMp3?: Buffer | null;
+}): Promise<{ mp3Bytes: Buffer; hint: string }> {
+  if (input.preNormalizedMp3?.length) {
+    return {
+      mp3Bytes: input.preNormalizedMp3,
+      hint: input.sourceHint?.trim() || "audio.mp3",
+    };
+  }
+
+  if (resolveAudioNormalizeMode() !== "server") {
+    throw new Error(
+      "Server ffmpeg is muted. Normalize in the browser (Upload), or set AUDIO_NORMALIZE_MODE=server to restore.",
+    );
+  }
+
   const resolved = await resolveSourceBytes(input);
   const mp3Bytes = await normalizeToMinus16LufsMp3(resolved.sourceBytes, resolved.hint);
-  const uploaded = await uploadIntoVaultStaging({ stagingId, mp3Bytes });
+  return { mp3Bytes, hint: resolved.hint };
+}
+
+export async function stageTrackToVault(input: VaultStageInput): Promise<VaultStageResult> {
+  const stagingId = input.stagingId?.trim() || newStagingId();
+  const { mp3Bytes, hint } = await resolveMp3Bytes(input);
+  const uploaded = await uploadIntoVaultStaging({
+    stagingId,
+    mp3Bytes,
+    masterBytes: input.masterBytes,
+    masterHint: input.masterHint || input.sourceHint || hint,
+  });
 
   return {
     stagingId,
@@ -68,6 +106,7 @@ export async function stageTrackToVault(input: VaultStageInput): Promise<VaultSt
     dropboxDl: uploaded.dropboxDl,
     sourceDropboxPath: null,
     sourceFolderLink: null,
+    masterObjectKey: uploaded.masterObjectKey ?? null,
   };
 }
 
@@ -80,8 +119,12 @@ export async function finalizeVaultForTrack(input: {
   dropboxPath?: string | null;
   sourceDropboxPath?: string | null;
   sourceFolderLink?: string | null;
+  masterObjectKey?: string | null;
   sourceBytes?: Buffer | null;
   sourceHint?: string | null;
+  preNormalizedMp3?: Buffer | null;
+  masterBytes?: Buffer | null;
+  masterHint?: string | null;
 }): Promise<VaultIngestResult> {
   const trackId = input.trackId.trim();
   if (!trackId) throw new Error("trackId is required");
@@ -94,15 +137,16 @@ export async function finalizeVaultForTrack(input: {
       stagingId: stagingId || null,
       stagingPath: stagingPath || null,
       trackId,
+      masterObjectKey: input.masterObjectKey?.trim() || null,
     });
-    const result = {
+    return {
       dropboxPath: promoted.dropboxPath,
       dropboxLink: promoted.dropboxLink,
       dropboxDl: promoted.dropboxDl,
       sourceDropboxPath: input.sourceDropboxPath?.trim() || null,
       sourceFolderLink: input.sourceFolderLink?.trim() || null,
+      masterObjectKey: promoted.masterObjectKey ?? input.masterObjectKey?.trim() ?? null,
     };
-    return result;
   }
 
   if (input.dropboxPath?.trim() && !isVaultStagingKey(input.dropboxPath)) {
@@ -112,6 +156,7 @@ export async function finalizeVaultForTrack(input: {
       dropboxDl: input.dropboxDl?.trim() || null,
       sourceDropboxPath: input.sourceDropboxPath?.trim() || null,
       sourceFolderLink: input.sourceFolderLink?.trim() || null,
+      masterObjectKey: input.masterObjectKey?.trim() || null,
     };
   }
 
@@ -119,6 +164,9 @@ export async function finalizeVaultForTrack(input: {
     trackId,
     sourceBytes: input.sourceBytes,
     sourceHint: input.sourceHint,
+    preNormalizedMp3: input.preNormalizedMp3,
+    masterBytes: input.masterBytes,
+    masterHint: input.masterHint,
   });
 }
 
@@ -126,9 +174,13 @@ export async function ingestTrackToVault(input: VaultIngestInput): Promise<Vault
   const trackId = input.trackId.trim();
   if (!trackId) throw new Error("trackId is required for vault ingest");
 
-  const resolved = await resolveSourceBytes(input);
-  const mp3Bytes = await normalizeToMinus16LufsMp3(resolved.sourceBytes, resolved.hint);
-  const uploaded = await uploadIntoVault({ trackId, mp3Bytes });
+  const { mp3Bytes, hint } = await resolveMp3Bytes(input);
+  const uploaded = await uploadIntoVault({
+    trackId,
+    mp3Bytes,
+    masterBytes: input.masterBytes,
+    masterHint: input.masterHint || input.sourceHint || hint,
+  });
 
   return {
     dropboxPath: uploaded.dropboxPath,
@@ -136,5 +188,6 @@ export async function ingestTrackToVault(input: VaultIngestInput): Promise<Vault
     dropboxDl: uploaded.dropboxDl,
     sourceDropboxPath: null,
     sourceFolderLink: null,
+    masterObjectKey: uploaded.masterObjectKey ?? null,
   };
 }

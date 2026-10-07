@@ -11,14 +11,23 @@ import {
 } from "@/components/player-provider";
 import { CATALOG_PAGE_SIZE } from "@/lib/catalog-constants";
 import { saveCatalogFilterQuery, clearCatalogFilterQuery } from "@/lib/catalog-filter-storage";
-import { DEFAULT_CATALOG_SORT, defaultSortDir, type CatalogSort, type CatalogSortDir } from "@/lib/catalog-sort";
+import {
+  DEFAULT_CATALOG_SORT,
+  applySortDirParam,
+  defaultSortDir,
+  parseSortDirParam,
+  type CatalogSort,
+  type CatalogSortDir,
+} from "@/lib/catalog-sort";
 import type { TrackListItem } from "@/lib/track-list-item";
 import type { TrackRelationView } from "@/lib/track-relations";
 import type { CatalogMetaSuggestions } from "@/lib/queries";
 import type { UserTrackLicenseStatus } from "@/lib/license-requests";
 import type { CatalogVocabulary } from "@/lib/vocabulary";
 import { type SamroProProfile } from "@/lib/samro";
+import { type CapassoProProfile } from "@/lib/capasso";
 import { SamroPrepareBar } from "@/components/samro-prepare-bar";
+import { CapassoPrepareBar } from "@/components/capasso-prepare-bar";
 import { BrowseSelectionBar } from "@/components/browse-selection-bar";
 import { BatchTrackEditPanel } from "@/components/batch-track-edit-panel";
 import type { ComposerOption } from "@/components/composer-picker";
@@ -55,7 +64,9 @@ export function CatalogTrackList({
   composers = [],
   subscriberView = false,
   prepareProMode = false,
+  prepareSociety,
   samroProfile,
+  capassoProfile,
   housePublisherName = "",
 }: {
   /** Canonical filter query string (no limit/offset) — used as reset key + API params. */
@@ -73,7 +84,9 @@ export function CatalogTrackList({
   composers?: ComposerOption[];
   subscriberView?: boolean;
   prepareProMode?: boolean;
+  prepareSociety?: "samro" | "capasso";
   samroProfile?: SamroProProfile;
+  capassoProfile?: CapassoProProfile;
   housePublisherName?: string;
 }) {
   const router = useRouter();
@@ -109,17 +122,15 @@ export function CatalogTrackList({
     sortParam && SORT_VALUES.includes(sortParam as CatalogSort)
       ? (sortParam as CatalogSort)
       : DEFAULT_CATALOG_SORT;
-  const dirParam = searchParams.get("dir");
   const sortDir: CatalogSortDir =
-    dirParam === "asc" || dirParam === "desc" ? dirParam : defaultSortDir(sort);
+    parseSortDirParam((key) => searchParams.get(key)) ?? defaultSortDir(sort);
 
   const handleSortChange = useCallback(
     (nextSort: CatalogSort, nextDir: CatalogSortDir) => {
       const next = new URLSearchParams(searchParams.toString());
       if (nextSort === DEFAULT_CATALOG_SORT) next.delete("sort");
       else next.set("sort", nextSort);
-      if (nextDir === defaultSortDir(nextSort)) next.delete("dir");
-      else next.set("dir", nextDir);
+      applySortDirParam(next, nextSort, nextDir);
       const query = next.toString();
       saveCatalogFilterQuery(query);
       startTransition(() => {
@@ -452,8 +463,10 @@ export function CatalogTrackList({
         sortDir={sortDir}
         onSortChange={handleSortChange}
         prepareProMode={prepareProMode}
+        prepareSociety={prepareSociety}
         selectionMode={selectionActive}
         samroProfile={samroProfile}
+        capassoProfile={capassoProfile}
         housePublisherName={housePublisherName}
         selectedIds={selectionActive ? selectedIds : undefined}
         onToggleSelect={
@@ -478,9 +491,19 @@ export function CatalogTrackList({
         onClearFilters={filterQuery ? handleClearFilters : undefined}
       />
 
-      {prepareProMode && samroProfile ? (
+      {prepareProMode && prepareSociety === "capasso" && capassoProfile ? (
+        <CapassoPrepareBar
+          tracks={selectedTracks}
+          selectedIds={[...selectedIds]}
+          profile={capassoProfile}
+          onClear={clearSelection}
+          onBatchEdit={() => setBatchEditOpen(true)}
+        />
+      ) : null}
+
+      {prepareProMode && prepareSociety !== "capasso" && samroProfile ? (
         <SamroPrepareBar
-          tracks={tracks}
+          tracks={selectedTracks}
           selectedIds={[...selectedIds]}
           profile={samroProfile}
           onClear={clearSelection}

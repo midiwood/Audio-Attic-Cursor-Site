@@ -23,11 +23,14 @@ export function readDurationFromAudioUrl(url: string): Promise<number | null> {
   return new Promise((resolve) => {
     const audio = new Audio();
     audio.preload = "metadata";
+    let settled = false;
 
     const finish = (value: number | null) => {
+      if (settled) return;
+      settled = true;
       audio.onloadedmetadata = null;
       audio.onerror = null;
-      audio.src = "";
+      audio.removeAttribute("src");
       resolve(value);
     };
 

@@ -44,6 +44,7 @@ export function PublisherSettingsForm({
     proRelationNumber: SettingFieldStatus;
     proIpiBaseNumber: SettingFieldStatus;
     proPaIpiNameNumber: SettingFieldStatus;
+    capassoCaaNumber: SettingFieldStatus;
   };
 }) {
   const router = useRouter();
@@ -56,6 +57,9 @@ export function PublisherSettingsForm({
   );
   const [proPaIpiNameNumber, setProPaIpiNameNumber] = useState(
     initial.proPaIpiNameNumber.displayValue || "",
+  );
+  const [capassoCaaNumber, setCapassoCaaNumber] = useState(
+    initial.capassoCaaNumber.displayValue || "",
   );
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -75,6 +79,7 @@ export function PublisherSettingsForm({
           [SETTINGS.PUBLISHER_PRO_RELATION]: proRelationNumber.trim(),
           [SETTINGS.PUBLISHER_PRO_IPI_BASE]: proIpiBaseNumber.trim(),
           [SETTINGS.PUBLISHER_PRO_PA_IPI]: proPaIpiNameNumber.trim(),
+          [SETTINGS.PUBLISHER_CAPASSO_CAA]: capassoCaaNumber.trim(),
         },
       }),
     });
@@ -92,7 +97,8 @@ export function PublisherSettingsForm({
     <form onSubmit={onSave} className="max-w-xl space-y-5">
       <p className="text-sm text-[var(--ink-dim)]">
         House publisher is the Account Admin default for imports and marks tracks as
-        self-published (required to issue sync licenses). PRO numbers feed SAMRO forms.
+        self-published (required to issue sync licenses). PRO numbers feed SAMRO and Capasso
+        forms.
       </p>
 
       <label className="block">
@@ -160,6 +166,29 @@ export function PublisherSettingsForm({
             autoComplete="off"
           />
           <CopyFieldButton value={proPaIpiNameNumber} label="PA IPI name number" />
+        </div>
+      </label>
+
+      <div className="border-t border-[var(--line)] pt-4">
+        <h2 className="text-xs font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
+          CAPASSO
+        </h2>
+        <p className="mt-1 text-[11px] text-[var(--ink-dim)]">
+          Membership identifier for SWI work-registration exports.
+        </p>
+      </div>
+
+      <label className="block">
+        <span className={labelClass}>CAA number</span>
+        <div className="flex items-center gap-2">
+          <input
+            className={fieldClass}
+            value={capassoCaaNumber}
+            onChange={(e) => setCapassoCaaNumber(e.target.value)}
+            placeholder="CCA001317"
+            autoComplete="off"
+          />
+          <CopyFieldButton value={capassoCaaNumber} label="CAA number" />
         </div>
       </label>
 

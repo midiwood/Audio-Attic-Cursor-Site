@@ -19,6 +19,8 @@ export const tracks = sqliteTable(
     sourceDropboxPath: text("source_dropbox_path"),
     /** Shared link to the original file's parent folder (admin provenance). */
     sourceFolderLink: text("source_folder_link"),
+    /** Spaces key for preserved import master (WAV/AIFF/MP3), e.g. vault/{id}/masters/original.wav */
+    masterObjectKey: text("master_object_key"),
     workingTitle: text("working_title"),
     libraryTitle: text("library_title"),
     client: text("client"),
@@ -37,6 +39,8 @@ export const tracks = sqliteTable(
     instruments: text("instruments"),
     attributes: text("attributes"),
     samro: text("samro"),
+    /** Capasso SWI mechanical registration: Yes / No. Independent of SAMRO. */
+    capasso: text("capasso"),
     license: text("license"),
     licenseDetail: text("license_detail"),
     perpetuity: text("perpetuity"),
@@ -52,6 +56,7 @@ export const tracks = sqliteTable(
     index("tracks_year_idx").on(table.year),
     index("tracks_bpm_idx").on(table.bpm),
     index("tracks_trashed_at_idx").on(table.trashedAt),
+    index("tracks_capasso_idx").on(table.capasso),
   ],
 );
 
@@ -370,6 +375,52 @@ export type SamroSubmission = typeof samroSubmissions.$inferSelect;
 export type NewSamroSubmission = typeof samroSubmissions.$inferInsert;
 export type SamroSubmissionTrack = typeof samroSubmissionTracks.$inferSelect;
 
+/** Batch Capasso SWI work-registration forms. */
+export const capassoSubmissions = sqliteTable(
+  "capasso_submissions",
+  {
+    id: text("id").primaryKey(),
+    publisherName: text("publisher_name").notNull(),
+    /** draft | exported | completed | cancelled */
+    status: text("status").notNull(),
+    createdBy: text("created_by").notNull(),
+    fileName: text("file_name"),
+    notes: text("notes"),
+    createdAt: text("created_at").notNull(),
+    exportedAt: text("exported_at"),
+    completedAt: text("completed_at"),
+    trashedAt: text("trashed_at"),
+    archivedAt: text("archived_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("capasso_submissions_status_idx").on(table.status),
+    index("capasso_submissions_trashed_at_idx").on(table.trashedAt),
+    index("capasso_submissions_archived_at_idx").on(table.archivedAt),
+  ],
+);
+
+export const capassoSubmissionTracks = sqliteTable(
+  "capasso_submission_tracks",
+  {
+    submissionId: text("submission_id")
+      .notNull()
+      .references(() => capassoSubmissions.id, { onDelete: "cascade" }),
+    trackId: text("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    snapshotJson: text("snapshot_json"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.submissionId, table.trackId] }),
+    index("capasso_submission_tracks_track_idx").on(table.trackId),
+  ],
+);
+
+export type CapassoSubmission = typeof capassoSubmissions.$inferSelect;
+export type NewCapassoSubmission = typeof capassoSubmissions.$inferInsert;
+export type CapassoSubmissionTrack = typeof capassoSubmissionTracks.$inferSelect;
+
 /** Composer registry for SAMRO rights holders (name + IPI). */
 export const composers = sqliteTable(
   "composers",
@@ -413,3 +464,31 @@ export const trackComposers = sqliteTable(
 export type Composer = typeof composers.$inferSelect;
 export type NewComposer = typeof composers.$inferInsert;
 export type TrackComposer = typeof trackComposers.$inferSelect;
+
+/** Audit trail for permanently purged tracks (Spaces + catalog). */
+export const trackDeleteLogs = sqliteTable(
+  "track_delete_logs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    trackId: text("track_id").notNull(),
+    workingTitle: text("working_title"),
+    libraryTitle: text("library_title"),
+    client: text("client"),
+    project: text("project"),
+    dropboxPath: text("dropbox_path"),
+    masterObjectKey: text("master_object_key"),
+    /** JSON string[] of Spaces keys removed */
+    deletedObjectKeys: text("deleted_object_keys").notNull().default("[]"),
+    /** JSON string[] of Spaces cleanup errors */
+    spacesErrors: text("spaces_errors").notNull().default("[]"),
+    deletedBy: text("deleted_by"),
+    deletedAt: text("deleted_at").notNull(),
+  },
+  (table) => [
+    index("track_delete_logs_track_id_idx").on(table.trackId),
+    index("track_delete_logs_deleted_at_idx").on(table.deletedAt),
+  ],
+);
+
+export type TrackDeleteLog = typeof trackDeleteLogs.$inferSelect;
+export type NewTrackDeleteLog = typeof trackDeleteLogs.$inferInsert;

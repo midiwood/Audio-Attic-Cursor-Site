@@ -32,7 +32,7 @@ export default async function AdminPage() {
             Upload
           </h1>
           <p className="mt-1 text-sm text-[var(--ink-dim)]">
-            One track: AI auto-tags · multiple: shared manual tags
+            Import local audio, tag with AI, then confirm into the catalog.
           </p>
         </div>
         <AdminActions canManageUsers={isSiteAdmin(session)} />

@@ -11,6 +11,20 @@ export function vaultTrackMp3Key(trackId: string): string {
   return `${vaultPrefix()}/${id}/track.mp3`;
 }
 
+/** Folder prefix for a track's vault objects (mp3, masters, versions, stems). Trailing slash. */
+export function vaultTrackFolderPrefix(trackId: string): string {
+  const id = trackId.trim();
+  if (!id) throw new Error("trackId is required");
+  return `${vaultPrefix()}/${id}/`;
+}
+
+/** Watermark cache folder for a track. Trailing slash. */
+export function vaultWatermarkedFolderPrefix(trackId: string): string {
+  const id = trackId.trim();
+  if (!id) throw new Error("trackId is required");
+  return `${vaultPrefix()}/watermarked/${id}/`;
+}
+
 export function vaultStagingFolderKey(stagingId: string): string {
   const id = stagingId.trim();
   if (!id) throw new Error("stagingId is required");
@@ -19,6 +33,24 @@ export function vaultStagingFolderKey(stagingId: string): string {
 
 export function vaultStagingMp3Key(stagingId: string): string {
   return `${vaultStagingFolderKey(stagingId)}/track.mp3`;
+}
+
+/** Original master (WAV/AIFF/etc.) next to the vault MP3. */
+export function vaultMasterKey(trackId: string, ext: string): string {
+  const id = trackId.trim();
+  const e = ext.replace(/^\./, "").toLowerCase().replace(/[^a-z0-9]+/g, "") || "wav";
+  if (!id) throw new Error("trackId is required");
+  return `${vaultPrefix()}/${id}/masters/original.${e}`;
+}
+
+export function vaultStagingMasterKey(stagingId: string, ext: string): string {
+  const e = ext.replace(/^\./, "").toLowerCase().replace(/[^a-z0-9]+/g, "") || "wav";
+  return `${vaultStagingFolderKey(stagingId)}/masters/original.${e}`;
+}
+
+export function masterExtFromObjectKey(key: string | null | undefined): string {
+  const match = String(key || "").match(/\/masters\/original\.([a-z0-9]+)$/i);
+  return match?.[1]?.toLowerCase() || "wav";
 }
 
 export function vaultVersionMp3Key(trackId: string, slug: string): string {

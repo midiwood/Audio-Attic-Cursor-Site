@@ -43,6 +43,7 @@ import {
   filterImportAudioFiles,
   IMPORT_PIPELINE_STEPS,
   normalizeTracksToVault,
+  persistImportWaveformPeaks,
   resolveAiTitleMode,
   tagTracksWithAi,
   type AiSessionOpts,
@@ -110,6 +111,8 @@ function catalogMatchToPlayerTrack(track: TrackListItem): PlayerTrack | null {
     dropboxDl: track.dropboxDl,
     dropboxPath: track.dropboxPath,
     license: track.license,
+    audioSrc: track.audioSrc,
+    waveformApi: track.waveformApi,
   };
 }
 
@@ -849,31 +852,41 @@ export function ImportForm({
         return;
       }
 
-      let tagged = await runAiTagPass(tracks, {
-        force: true,
-        titleMode: opts?.titleMode,
-        holdPhase: true,
-      });
+      let tagged = tracks;
 
-      if (tagged.some((track) => !track.vaultReady)) {
+      // Browser wasm normalize + stage before AI (AI analyzes the −16 LUFS MP3).
+      if (tracks.some((track) => !track.vaultReady)) {
         setPipelinePhase("normalize");
-        setPipelineItem({ current: 1, total: tagged.length });
+        setPipelineItem({ current: 1, total: tracks.length });
         tagged = await normalizeTracksToVault({
-          tracks: tagged,
+          tracks,
           onTrackProgress: (current, total, msg) => {
             setPipelineItem({ current, total });
             setMessage(msg);
           },
         });
         setDrafts((prev) => mergeDraftUpdates(prev, tagged));
-        setMessage(
-          tagged.length === 1
-            ? "Normalized — ready to import"
-            : `${tagged.length} tracks normalized — ready to import`,
-        );
       }
+
+      tagged = await runAiTagPass(tagged, {
+        force: true,
+        titleMode: opts?.titleMode,
+        holdPhase: true,
+      });
+
+      setMessage(
+        tagged.length === 1
+          ? "Ready to import"
+          : `${tagged.length} tracks ready to import`,
+      );
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Import pipeline failed");
+      setError(
+        err instanceof Error
+          ? err.message
+          : typeof err === "string"
+            ? err
+            : "Import pipeline failed",
+      );
     } finally {
       setPipelinePhase("idle");
       setPipelineItem(null);
@@ -901,7 +914,7 @@ export function ImportForm({
   function proceedDespiteHardDup() {
     setHardDupProceed(true);
     setError("");
-    setMessage("Proceed unlocked — tagging then normalizing…");
+    setMessage("Proceed unlocked — normalizing then tagging…");
     void runImportPipeline({ tracks: drafts }, { force: true });
   }
 
@@ -1065,6 +1078,7 @@ export function ImportForm({
           dropboxPath: track.dropboxPath || "",
           sourceDropboxPath: track.sourceDropboxPath || "",
           sourceFolderLink: track.sourceFolderLink || "",
+          masterObjectKey: track.masterObjectKey || "",
           vaultReady: Boolean(track.vaultReady),
           localOnly: Boolean(track.localFile),
           workingTitle: track.workingTitle,
@@ -1128,19 +1142,25 @@ export function ImportForm({
 
       clearPlayer();
       setDupWarnings([]);
-      setMessage(`Imported ${data.count}: ${(data.ids || []).join(", ")}`);
-      const waves = data.waveforms as { ok?: number; failed?: number } | undefined;
-      if (waves && typeof waves.ok === "number") {
-        if (waves.failed) {
-          setMessage(
-            `Imported ${data.count}: ${(data.ids || []).join(", ")} · waveforms ${waves.ok} ok, ${waves.failed} skipped`,
-          );
-        } else if (waves.ok > 0) {
-          setMessage(
-            `Imported ${data.count}: ${(data.ids || []).join(", ")} · waveforms ready`,
-          );
-        }
+      const ids = Array.isArray(data.ids) ? (data.ids as string[]) : [];
+      setMessage(`Imported ${data.count}: ${ids.join(", ")}`);
+
+      // Client peaks first (works on live without server ffmpeg).
+      const clientWaves = await persistImportWaveformPeaks(tracksToImport, ids);
+      const serverWaves = data.waveforms as { ok?: number; failed?: number } | undefined;
+      const waveOk = clientWaves.ok || (typeof serverWaves?.ok === "number" ? serverWaves.ok : 0);
+      const waveFailed =
+        clientWaves.failed ||
+        (typeof serverWaves?.failed === "number" ? serverWaves.failed : 0);
+
+      if (waveOk > 0 && waveFailed > 0) {
+        setMessage(
+          `Imported ${data.count}: ${ids.join(", ")} · waveforms ${waveOk} ok, ${waveFailed} skipped`,
+        );
+      } else if (waveOk > 0) {
+        setMessage(`Imported ${data.count}: ${ids.join(", ")} · waveforms ready`);
       }
+
       resetTagState();
       setDrafts((prev) => {
         revokeAll(prev);

@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getApiSession, isSubscriber } from "@/lib/auth";
+import { canManageCatalog, getApiSession, isSubscriber } from "@/lib/auth";
 import { resolveAudioRedirectUrl, resolvePlayableObjectKey } from "@/lib/audio-access";
 import { guestMayAccessTrack } from "@/lib/guest-playlist-access";
 import { getTrackById } from "@/lib/queries";
 import { formatAudioDownloadLabel } from "@/lib/tracks";
 import { isSubscriberVisible } from "@/lib/publisher";
 import { getTrackAssetForTrack } from "@/lib/track-assets";
+import { masterExtFromObjectKey } from "@/lib/storage/paths";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -15,6 +16,7 @@ export async function GET(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id");
   const assetId = req.nextUrl.searchParams.get("asset")?.trim() || "";
   const download = req.nextUrl.searchParams.get("download") === "1";
+  const wantMaster = req.nextUrl.searchParams.get("master") === "1";
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
   }
@@ -31,6 +33,27 @@ export async function GET(req: NextRequest) {
   }
   if (session && isSubscriber(session) && !isSubscriberVisible(track)) {
     return NextResponse.json({ error: "Track or audio not found" }, { status: 404 });
+  }
+
+  if (wantMaster) {
+    if (!canManageCatalog(session)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+    const masterKey = track.masterObjectKey?.trim();
+    if (!masterKey) {
+      return NextResponse.json({ error: "No master file stored for this track" }, { status: 404 });
+    }
+    const ext = masterExtFromObjectKey(masterKey);
+    const redirectUrl = await resolveAudioRedirectUrl({
+      objectKey: masterKey,
+      legacyDlUrl: null,
+      download: true,
+      downloadLabel: `${formatAudioDownloadLabel(track)}-master.${ext}`,
+    });
+    if (!redirectUrl) {
+      return NextResponse.json({ error: "Master not found in storage" }, { status: 404 });
+    }
+    return NextResponse.redirect(redirectUrl, 302);
   }
 
   let objectKey = track.dropboxPath;

@@ -22,7 +22,8 @@ export default async function AdminPublisherSettingsPage() {
           Publisher / PRO
         </h1>
         <p className="mt-1 text-sm text-[var(--ink-dim)]">
-          House publisher for imports and self-published availability, plus SAMRO identifiers.
+          House publisher for imports and self-published availability, plus SAMRO and Capasso
+          identifiers.
         </p>
       </header>
       <PublisherSettingsForm initial={initial} />

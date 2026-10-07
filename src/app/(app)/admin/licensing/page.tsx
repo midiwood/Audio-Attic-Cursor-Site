@@ -31,8 +31,16 @@ export default async function AdminLicensingPage() {
             SAMRO forms
           </Link>
           {" · "}
+          <Link href="/admin/capasso" className="text-[var(--accent)] hover:underline">
+            Capasso SWI
+          </Link>
+          {" · "}
           <Link href="/?samro=prepare" className="text-[var(--accent)] hover:underline">
-            Prepare PRO
+            Prepare SAMRO
+          </Link>
+          {" · "}
+          <Link href="/?capasso=prepare" className="text-[var(--accent)] hover:underline">
+            Prepare Capasso
           </Link>
         </p>
       </header>

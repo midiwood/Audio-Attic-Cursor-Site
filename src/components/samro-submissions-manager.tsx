@@ -203,7 +203,7 @@ export function SamroSubmissionsManager({
       <>
         No SAMRO forms yet.{" "}
         <Link href="/?samro=prepare" className="text-[var(--accent)] hover:underline">
-          Open Prepare PRO
+          Open Prepare SAMRO
         </Link>
       </>
     );
@@ -212,7 +212,7 @@ export function SamroSubmissionsManager({
   return (
     <div className="space-y-4">
       <p className="text-sm text-[var(--ink-dim)]">
-        Forms prepared from Browse → SAMRO → Prepare PRO. After you email the file to SAMRO,
+        Forms prepared from Browse → PRO → SAMRO → Prepare. After you email the file to SAMRO,
         mark the form complete to set each track’s SAMRO flag to Yes. Completed forms are
         archived, not trashed. Multiple composers export as separate rights holders with split
         perf share.

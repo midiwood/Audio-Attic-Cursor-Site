@@ -1,6 +1,12 @@
 import { sanitizeFilters, type TrackFilters } from "@/lib/queries";
-import { DEFAULT_CATALOG_SORT, defaultSortDir } from "@/lib/catalog-sort";
+import {
+  DEFAULT_CATALOG_SORT,
+  applySortDirParam,
+  defaultSortDir,
+  parseSortDirParam,
+} from "@/lib/catalog-sort";
 import { parseSamroFilter } from "@/lib/samro";
+import { parseCapassoFilter } from "@/lib/capasso";
 
 function first(value: string | string[] | null | undefined): string | undefined {
   if (value == null) return undefined;
@@ -54,9 +60,7 @@ export function parseCatalogFilters(
 
   const licenseParam = get("license") ?? "all";
   const sort = (get("sort") as TrackFilters["sort"]) || DEFAULT_CATALOG_SORT;
-  const dirParam = get("dir");
-  const sortDir =
-    dirParam === "asc" || dirParam === "desc" ? dirParam : defaultSortDir(sort);
+  const sortDir = parseSortDirParam(get) || defaultSortDir(sort);
 
   const yearParam = get("year");
   const yearNum = yearParam != null && yearParam !== "" ? Number(yearParam) : NaN;
@@ -73,6 +77,7 @@ export function parseCatalogFilters(
       ? licenseParam
       : "all") as TrackFilters["license"],
     samro: parseSamroFilter(get("samro")),
+    capasso: parseCapassoFilter(get("capasso")),
     year: Number.isFinite(yearNum) ? [yearNum] : undefined,
     sort,
     sortDir,
@@ -83,6 +88,8 @@ export function parseCatalogFilters(
   if (!raw.instrument?.length) raw.instrument = undefined;
   if (!raw.attribute?.length) raw.attribute = undefined;
   if (raw.samro === "all") raw.samro = undefined;
+  if (raw.capasso === "all") raw.capasso = undefined;
+  if (raw.capasso) raw.samro = undefined;
 
   return sanitizeFilters(raw);
 }
@@ -92,6 +99,7 @@ export function catalogFiltersToQuery(filters: TrackFilters): string {
   if (filters.q) next.set("q", filters.q);
   if (filters.license && filters.license !== "all") next.set("license", filters.license);
   if (filters.samro && filters.samro !== "all") next.set("samro", filters.samro);
+  if (filters.capasso && filters.capasso !== "all") next.set("capasso", filters.capasso);
   setListParam(next, "genre", filters.genre);
   setListParam(next, "mood", filters.mood);
   setListParam(next, "instrument", filters.instrument);
@@ -101,7 +109,7 @@ export function catalogFiltersToQuery(filters: TrackFilters): string {
   const sort = filters.sort || DEFAULT_CATALOG_SORT;
   const sortDir = filters.sortDir || defaultSortDir(sort);
   if (sort !== DEFAULT_CATALOG_SORT) next.set("sort", sort);
-  if (sortDir !== defaultSortDir(sort)) next.set("dir", sortDir);
+  applySortDirParam(next, sort, sortDir);
 
   return next.toString();
 }

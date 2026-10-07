@@ -1,6 +1,13 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
-import { playlistTracks, playlists, tracks, type Track } from "@/db/schema";
+import {
+  playlistTracks,
+  playlists,
+  trackDeleteLogs,
+  tracks,
+  type Track,
+} from "@/db/schema";
+import { purgeVaultForTrack } from "@/lib/vault-storage";
 
 import { TRASH_HREF, TRASH_LABEL } from "@/lib/trash-constants";
 
@@ -66,23 +73,86 @@ export function countTrashedTracks(): number {
   return listTrashedTracks().length;
 }
 
-/** Permanently remove tracks (and cascaded relations / waveforms / playlist rows). */
-export function permanentlyDeleteTracks(trackIds: string[]): { deleted: number } {
-  const ids = [...new Set(trackIds.map((id) => id.trim()).filter(Boolean))];
-  if (!ids.length) return { deleted: 0 };
+export type PermanentDeleteResult = {
+  deleted: number;
+  spacesDeleted: number;
+  spacesErrors: string[];
+};
 
-  // Only allow permanent delete of tracks already in trash.
+/**
+ * Permanently remove trashed tracks:
+ * audit log → Spaces vault/watermark purge → SQLite delete (cascades).
+ * DB delete proceeds even if Spaces cleanup partially fails.
+ */
+export async function permanentlyDeleteTracks(
+  trackIds: string[],
+  opts?: { deletedBy?: string | null },
+): Promise<PermanentDeleteResult> {
+  const ids = [...new Set(trackIds.map((id) => id.trim()).filter(Boolean))];
+  if (!ids.length) {
+    return { deleted: 0, spacesDeleted: 0, spacesErrors: [] };
+  }
+
   const eligible = db
-    .select({ id: tracks.id })
+    .select()
     .from(tracks)
     .where(and(inArray(tracks.id, ids), isNotNull(tracks.trashedAt)))
-    .all()
-    .map((row) => row.id);
+    .all();
 
-  if (!eligible.length) return { deleted: 0 };
+  if (!eligible.length) {
+    return { deleted: 0, spacesDeleted: 0, spacesErrors: [] };
+  }
 
-  const result = db.delete(tracks).where(inArray(tracks.id, eligible)).run();
-  return { deleted: result.changes };
+  const deletedBy = opts?.deletedBy?.trim() || null;
+  const allSpacesErrors: string[] = [];
+  let spacesDeleted = 0;
+  const now = new Date().toISOString();
+
+  for (const track of eligible) {
+    const purge = await purgeVaultForTrack(track.id);
+    spacesDeleted += purge.deletedKeys.length;
+    allSpacesErrors.push(...purge.errors.map((e) => `${track.id}: ${e}`));
+
+    try {
+      db.insert(trackDeleteLogs)
+        .values({
+          trackId: track.id,
+          workingTitle: track.workingTitle,
+          libraryTitle: track.libraryTitle,
+          client: track.client,
+          project: track.project,
+          dropboxPath: track.dropboxPath,
+          masterObjectKey: track.masterObjectKey,
+          deletedObjectKeys: JSON.stringify(purge.deletedKeys),
+          spacesErrors: JSON.stringify(purge.errors),
+          deletedBy,
+          deletedAt: now,
+        })
+        .run();
+    } catch (err) {
+      console.error("[trash] failed to write track_delete_logs", track.id, err);
+    }
+
+    if (purge.errors.length) {
+      console.error(
+        `[trash] Spaces purge errors for ${track.id}:`,
+        purge.errors.slice(0, 5).join("; "),
+      );
+    } else {
+      console.info(
+        `[trash] purged ${track.id} (${purge.deletedKeys.length} Spaces object(s)) by ${deletedBy || "unknown"}`,
+      );
+    }
+  }
+
+  const eligibleIds = eligible.map((t) => t.id);
+  const result = db.delete(tracks).where(inArray(tracks.id, eligibleIds)).run();
+
+  return {
+    deleted: result.changes,
+    spacesDeleted,
+    spacesErrors: allSpacesErrors,
+  };
 }
 
 export function isTrackTrashed(track: Pick<Track, "trashedAt"> | null | undefined): boolean {

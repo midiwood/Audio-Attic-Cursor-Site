@@ -8,6 +8,7 @@ import {
 import { toTrackListItem } from "@/lib/track-list-item";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const staff = await getCatalogStaffSession();
@@ -60,7 +61,9 @@ export async function POST(req: NextRequest) {
     if (!ids.length) {
       return NextResponse.json({ error: "trackIds required" }, { status: 400 });
     }
-    const result = permanentlyDeleteTracks(ids);
+    const user = staff.session.user as { email?: string | null; id?: string | null };
+    const deletedBy = String(user?.email || user?.id || "").trim() || null;
+    const result = await permanentlyDeleteTracks(ids, { deletedBy });
     return NextResponse.json(result);
   }
 

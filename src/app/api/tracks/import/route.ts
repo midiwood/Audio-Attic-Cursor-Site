@@ -117,6 +117,7 @@ export async function POST(req: NextRequest) {
     dropboxPath?: string;
     sourceDropboxPath?: string;
     sourceFolderLink?: string;
+    masterObjectKey?: string;
     vaultReady?: boolean;
     localOnly?: boolean;
     duration?: string;
@@ -287,6 +288,7 @@ export async function POST(req: NextRequest) {
             dropboxPath: track.dropboxPath?.trim() || null,
             sourceDropboxPath: track.sourceDropboxPath?.trim() || null,
             sourceFolderLink: track.sourceFolderLink?.trim() || null,
+            masterObjectKey: track.masterObjectKey?.trim() || null,
           })
         : await ingestTrackToVault({
             trackId: ids[index],
@@ -302,6 +304,7 @@ export async function POST(req: NextRequest) {
         dropboxPath: vault.dropboxPath,
         sourceDropboxPath: vault.sourceDropboxPath,
         sourceFolderLink: vault.sourceFolderLink,
+        masterObjectKey: vault.masterObjectKey,
         workingTitle,
         libraryTitle,
         client: catalogClient,
@@ -319,6 +322,7 @@ export async function POST(req: NextRequest) {
         instruments,
         attributes,
         samro: String(shared.samro || "").trim() || "No",
+        capasso: "No",
         license,
         licenseDetail: needsLicense && parsedEntry ? parsedEntry.usedFor.trim() || null : null,
         perpetuity: needsLicense && parsedEntry ? parsedEntry.perpetuity || null : null,

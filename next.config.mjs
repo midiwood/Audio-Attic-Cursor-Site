@@ -1,6 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   serverExternalPackages: ["better-sqlite3"],
+  transpilePackages: ["@ffmpeg/ffmpeg", "@ffmpeg/util"],
   // Local WAV/MP3 imports can exceed the default ~10MB body buffer used when
   // middleware clones request bodies (truncation → FormData parse failure).
   experimental: {

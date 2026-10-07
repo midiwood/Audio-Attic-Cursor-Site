@@ -21,7 +21,7 @@ import {
   splitTags,
   toDropboxDlUrl,
 } from "@/lib/tracks";
-import { isSubscriberVisible } from "@/lib/publisher";
+import { getHousePublisherName, isSubscriberVisible } from "@/lib/publisher";
 import { getCatalogVocabulary } from "@/lib/vocabulary";
 import { DEFAULT_CATALOG_SORT, defaultSortDir } from "@/lib/catalog-sort";
 
@@ -34,6 +34,8 @@ export type TrackFilters = {
   license?: "available" | "clear" | "library" | "exclusive" | "hold" | "personal" | "all";
   /** Staff-only: SAMRO PRO submission. `prepare` = licensed ∩ not submitted. */
   samro?: "yes" | "no" | "prepare" | "all";
+  /** Staff-only: Capasso SWI. `prepare` = house-published Library/Exclusive/On Hold ∩ not submitted. */
+  capasso?: "yes" | "no" | "prepare" | "all";
   year?: number[];
   bpmMin?: number;
   bpmMax?: number;
@@ -94,9 +96,13 @@ export function syncTrackTags(trackId: string, track: Pick<Track, "genre" | "moo
 export function upsertTrack(data: Omit<NewTrack, "createdAt" | "updatedAt"> & Partial<Pick<NewTrack, "createdAt" | "updatedAt">>): Track {
   const now = new Date().toISOString();
   const dropboxDl = data.dropboxDl || (data.dropboxLink ? toDropboxDlUrl(data.dropboxLink) : null);
+  const existingCapasso = data.id
+    ? db.select({ capasso: tracks.capasso }).from(tracks).where(eq(tracks.id, data.id)).get()?.capasso
+    : null;
   const payload: NewTrack = {
     ...data,
     license: canonicalizeLicense(data.license),
+    capasso: data.capasso ?? existingCapasso ?? "No",
     dropboxDl,
     createdAt: data.createdAt || now,
     updatedAt: now,
@@ -113,6 +119,7 @@ export function upsertTrack(data: Omit<NewTrack, "createdAt" | "updatedAt"> & Pa
         dropboxPath: payload.dropboxPath,
         sourceDropboxPath: payload.sourceDropboxPath,
         sourceFolderLink: payload.sourceFolderLink,
+        masterObjectKey: payload.masterObjectKey,
         workingTitle: payload.workingTitle,
         libraryTitle: payload.libraryTitle,
         client: payload.client,
@@ -130,6 +137,7 @@ export function upsertTrack(data: Omit<NewTrack, "createdAt" | "updatedAt"> & Pa
         instruments: payload.instruments,
         attributes: payload.attributes,
         samro: payload.samro,
+        capasso: payload.capasso,
         license: payload.license,
         licenseDetail: payload.licenseDetail,
         perpetuity: payload.perpetuity,
@@ -461,6 +469,37 @@ function buildWhere(filters: TrackFilters): SQL | undefined {
         WHERE ${trackLicenseEntries.trashedAt} IS NULL
       )`,
     );
+  }
+
+  if (filters.capasso === "yes") {
+    clauses.push(
+      sql`lower(trim(coalesce(${tracks.capasso}, ''))) IN ('yes', 'y', 'true', '1')`,
+    );
+  } else if (filters.capasso === "no") {
+    clauses.push(
+      sql`lower(trim(coalesce(${tracks.capasso}, ''))) NOT IN ('yes', 'y', 'true', '1')`,
+    );
+  } else if (filters.capasso === "prepare") {
+    const house = getHousePublisherName().toLowerCase();
+    clauses.push(
+      sql`lower(trim(coalesce(${tracks.capasso}, ''))) NOT IN ('yes', 'y', 'true', '1')`,
+    );
+    clauses.push(
+      sql`lower(trim(coalesce(${tracks.license}, ''))) IN (
+        'library',
+        'library [available]',
+        'exclusive',
+        'on hold',
+        'hold'
+      )`,
+    );
+    if (!house) {
+      clauses.push(sql`0`);
+    } else {
+      clauses.push(
+        sql`instr(lower(coalesce(${tracks.publisher}, '')), ${house}) > 0`,
+      );
+    }
   }
 
   if (filters.genre?.length) {

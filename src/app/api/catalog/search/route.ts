@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
   const filters = parseCatalogFilters(params);
   filters.license = "clear";
   filters.samro = undefined;
+  filters.capasso = undefined;
   filters.year = undefined;
 
   const bpm = partnerBpmRange(params);

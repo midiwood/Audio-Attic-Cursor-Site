@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   dropbox_path TEXT,
   source_dropbox_path TEXT,
   source_folder_link TEXT,
+  master_object_key TEXT,
   working_title TEXT,
   library_title TEXT,
   client TEXT,
@@ -53,6 +54,7 @@ CREATE TABLE IF NOT EXISTS tracks (
   instruments TEXT,
   attributes TEXT,
   samro TEXT,
+  capasso TEXT,
   license TEXT,
   license_detail TEXT,
   perpetuity TEXT,
@@ -301,6 +303,24 @@ try {
   sqlite.exec(`ALTER TABLE tracks ADD COLUMN source_folder_link TEXT`);
 } catch {
   // column already exists
+}
+
+try {
+  sqlite.exec(`ALTER TABLE tracks ADD COLUMN master_object_key TEXT`);
+} catch {
+  // column already exists
+}
+
+try {
+  sqlite.exec(`ALTER TABLE tracks ADD COLUMN capasso TEXT`);
+} catch {
+  // column already exists
+}
+
+try {
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS tracks_capasso_idx ON tracks(capasso)`);
+} catch {
+  // ignore
 }
 
 try {
@@ -817,5 +837,61 @@ CREATE INDEX IF NOT EXISTS track_audio_assets_track_kind_idx ON track_audio_asse
   console.error("[db] track_audio_assets table failed", err);
 }
 
+try {
+  sqlite.exec(`
+CREATE TABLE IF NOT EXISTS track_delete_logs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  track_id TEXT NOT NULL,
+  working_title TEXT,
+  library_title TEXT,
+  client TEXT,
+  project TEXT,
+  dropbox_path TEXT,
+  master_object_key TEXT,
+  deleted_object_keys TEXT NOT NULL DEFAULT '[]',
+  spaces_errors TEXT NOT NULL DEFAULT '[]',
+  deleted_by TEXT,
+  deleted_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS track_delete_logs_track_id_idx ON track_delete_logs(track_id);
+CREATE INDEX IF NOT EXISTS track_delete_logs_deleted_at_idx ON track_delete_logs(deleted_at);
+`);
+} catch (err) {
+  console.error("[db] track_delete_logs table failed", err);
+}
+
+try {
+  sqlite.exec(`
+CREATE TABLE IF NOT EXISTS capasso_submissions (
+  id TEXT PRIMARY KEY NOT NULL,
+  publisher_name TEXT NOT NULL,
+  status TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  file_name TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL,
+  exported_at TEXT,
+  completed_at TEXT,
+  trashed_at TEXT,
+  archived_at TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS capasso_submissions_status_idx ON capasso_submissions(status);
+CREATE INDEX IF NOT EXISTS capasso_submissions_trashed_at_idx ON capasso_submissions(trashed_at);
+CREATE INDEX IF NOT EXISTS capasso_submissions_archived_at_idx ON capasso_submissions(archived_at);
+
+CREATE TABLE IF NOT EXISTS capasso_submission_tracks (
+  submission_id TEXT NOT NULL REFERENCES capasso_submissions(id) ON DELETE CASCADE,
+  track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  snapshot_json TEXT,
+  PRIMARY KEY (submission_id, track_id)
+);
+CREATE INDEX IF NOT EXISTS capasso_submission_tracks_track_idx ON capasso_submission_tracks(track_id);
+`);
+} catch (err) {
+  console.error("[db] capasso submission tables failed", err);
+}
+
 export const db = drizzle(sqlite, { schema: fullSchema });
+
 export { sqlite, dbPath, dataDir };

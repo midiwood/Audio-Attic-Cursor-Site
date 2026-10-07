@@ -577,6 +577,7 @@ function InlineTrackEditor({
     musicalKey: track.musicalKey || "",
     publisher: track.publisher || "",
     samro: track.samro || "No",
+    capasso: track.capasso || "No",
     license: canonicalizeLicense(track.license),
   });
   const [composerAssignments, setComposerAssignments] = useState<ComposerAssignmentInput[]>(() =>
@@ -722,6 +723,7 @@ function InlineTrackEditor({
         composers: composerAssignments,
         publisher: form.publisher,
         samro: form.samro,
+        capasso: form.capasso,
         license: form.license,
         genre: joinTags(tags.genre),
         mood: joinTags(tags.mood),
@@ -949,6 +951,19 @@ function InlineTrackEditor({
               className={fieldClass}
               value={form.samro}
               onChange={(e) => patchForm({ samro: e.target.value })}
+            >
+              <option value="No">Not submitted</option>
+              <option value="Yes">Submitted</option>
+            </select>
+          </label>
+          <label>
+            <span className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-[var(--ink-dim)]">
+              Capasso
+            </span>
+            <select
+              className={fieldClass}
+              value={form.capasso}
+              onChange={(e) => patchForm({ capasso: e.target.value })}
             >
               <option value="No">Not submitted</option>
               <option value="Yes">Submitted</option>

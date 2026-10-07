@@ -17,6 +17,8 @@ function toPlayerTrack(track: TrackListItem): PlayerTrack {
     dropboxDl: track.dropboxDl,
     dropboxPath: track.dropboxPath,
     license: track.license,
+    audioSrc: track.audioSrc,
+    waveformApi: track.waveformApi,
   };
 }
 
@@ -109,6 +111,8 @@ export function TrashPlaylistClient({
     const data = (await res.json().catch(() => ({}))) as {
       error?: string;
       deleted?: number;
+      spacesDeleted?: number;
+      spacesErrors?: string[];
     };
     setBusy(false);
     if (!res.ok) {
@@ -117,7 +121,18 @@ export function TrashPlaylistClient({
     }
     setTracks((prev) => prev.filter((t) => !selected.has(t.id)));
     setSelected(new Set());
-    setMessage(`Permanently deleted ${data.deleted ?? ids.length} track(s)`);
+    const spacesNote =
+      typeof data.spacesDeleted === "number"
+        ? ` · ${data.spacesDeleted} vault file(s) removed`
+        : "";
+    const errCount = Array.isArray(data.spacesErrors) ? data.spacesErrors.length : 0;
+    setMessage(
+      `Permanently deleted ${data.deleted ?? ids.length} track(s)${spacesNote}` +
+        (errCount ? ` · ${errCount} Spaces cleanup warning(s)` : ""),
+    );
+    if (errCount) {
+      setError(data.spacesErrors!.slice(0, 3).join(" · "));
+    }
     router.refresh();
   }
 

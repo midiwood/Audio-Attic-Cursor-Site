@@ -72,9 +72,16 @@ export default async function AdminSitePage() {
       badge: 0,
     },
     {
+      href: "/admin/capasso",
+      title: "Capasso",
+      description: "SWI submission log — download, mark complete. Prepare from Browse → PRO.",
+      meta: null as string | null,
+      badge: 0,
+    },
+    {
       href: "/admin/settings/publisher",
       title: "Publisher / PRO",
-      description: "House publisher name and SAMRO / PRO membership numbers.",
+      description: "House publisher name, SAMRO identifiers, and Capasso CAA.",
       meta: statusLabel(
         publisherReady,
         settingSource(SETTINGS.PUBLISHER_HOUSE_NAME),

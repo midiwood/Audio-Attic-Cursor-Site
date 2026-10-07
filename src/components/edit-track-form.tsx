@@ -81,6 +81,7 @@ export function EditTrackForm({
     musicalKey: track.musicalKey || "",
     publisher: track.publisher || "",
     samro: track.samro || "No",
+    capasso: track.capasso || "No",
     license: canonicalizeLicense(track.license),
   });
   const [composerAssignments, setComposerAssignments] = useState<ComposerAssignmentInput[]>(
@@ -189,6 +190,7 @@ export function EditTrackForm({
         composers: composerAssignments,
         publisher: form.publisher,
         samro: form.samro,
+        capasso: form.capasso,
         license: form.license,
         genre: joinTags(tags.genre),
         mood: joinTags(tags.mood),
@@ -410,6 +412,19 @@ export function EditTrackForm({
               <option value="Yes">Submitted</option>
             </select>
           </label>
+          <label>
+            <span className="mb-1 block text-[10px] uppercase tracking-[0.12em] text-[var(--ink-dim)]">
+              Capasso
+            </span>
+            <select
+              className={fieldClass}
+              value={form.capasso}
+              onChange={(e) => patchForm({ capasso: e.target.value })}
+            >
+              <option value="No">Not submitted</option>
+              <option value="Yes">Submitted</option>
+            </select>
+          </label>
 
           <TrackLicenseSection
             license={form.license}
@@ -458,6 +473,14 @@ export function EditTrackForm({
           >
             {aiBusy ? "AI analyzing…" : "Re-run AI"}
           </button>
+          {track.masterObjectKey ? (
+            <a
+              href={`/api/audio?id=${encodeURIComponent(track.id)}&master=1`}
+              className="ml-2 inline-block rounded-md border border-[var(--line)] px-3 py-1.5 text-sm text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)]"
+            >
+              Download master
+            </a>
+          ) : null}
         </div>
       </section>
 
