@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { user } from "@/db/auth-schema";
 import { siteSettings } from "@/db/schema";
 import {
+  DEFAULT_CAPASSO_CAA,
   SETTINGS,
   type SettingKey,
   type SettingFieldStatus,
@@ -313,6 +314,7 @@ export type PublisherRuntimeConfig = {
   proRelationNumber: string;
   proIpiBaseNumber: string;
   proPaIpiNameNumber: string;
+  capassoCaaNumber: string;
 };
 
 /** Prefer PA IPI name number for rights-holder IPI; fall back to base. */
@@ -323,16 +325,38 @@ export function getPublisherRuntimeConfig(): PublisherRuntimeConfig {
     proRelationNumber: resolveSetting(SETTINGS.PUBLISHER_PRO_RELATION),
     proIpiBaseNumber: resolveSetting(SETTINGS.PUBLISHER_PRO_IPI_BASE),
     proPaIpiNameNumber: resolveSetting(SETTINGS.PUBLISHER_PRO_PA_IPI),
+    capassoCaaNumber: resolveSetting(SETTINGS.PUBLISHER_CAPASSO_CAA, DEFAULT_CAPASSO_CAA),
+  };
+}
+
+export function getCapassoProProfileFromSiteSettings(): {
+  houseName: string;
+  caaNumber: string;
+  ipiNumber: string;
+} {
+  const cfg = getPublisherRuntimeConfig();
+  const ipiNumber =
+    cfg.proPaIpiNameNumber.trim() || cfg.proIpiBaseNumber.trim();
+  return {
+    houseName: cfg.houseName.trim(),
+    caaNumber: cfg.capassoCaaNumber.trim() || DEFAULT_CAPASSO_CAA,
+    ipiNumber,
   };
 }
 
 export function getPublisherSettingsView() {
   ensurePublisherSettingsSeeded();
+  const caa = getSettingFieldStatus(SETTINGS.PUBLISHER_CAPASSO_CAA);
   return {
     houseName: getSettingFieldStatus(SETTINGS.PUBLISHER_HOUSE_NAME),
     proRelationNumber: getSettingFieldStatus(SETTINGS.PUBLISHER_PRO_RELATION),
     proIpiBaseNumber: getSettingFieldStatus(SETTINGS.PUBLISHER_PRO_IPI_BASE),
     proPaIpiNameNumber: getSettingFieldStatus(SETTINGS.PUBLISHER_PRO_PA_IPI),
+    capassoCaaNumber: {
+      ...caa,
+      displayValue: caa.displayValue || DEFAULT_CAPASSO_CAA,
+      configured: Boolean(caa.displayValue || DEFAULT_CAPASSO_CAA),
+    },
   };
 }
 

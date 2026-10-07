@@ -25,7 +25,10 @@ import {
   ensureHouseComposer,
   attachSamroComposerSlots,
 } from "@/lib/composers";
-import { getPublisherRuntimeConfig } from "@/lib/site-settings";
+import {
+  getCapassoProProfileFromSiteSettings,
+  getPublisherRuntimeConfig,
+} from "@/lib/site-settings";
 import { getCatalogVocabulary } from "@/lib/vocabulary";
 
 export const dynamic = "force-dynamic";
@@ -42,28 +45,31 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   if (subscriber) {
     filters.license = "available";
   }
-  // SAMRO and year are staff-only; ignore if a subscriber somehow has them in the URL.
+  // SAMRO / Capasso and year are staff-only; ignore if a subscriber somehow has them in the URL.
   if (!staff) {
     filters.samro = undefined;
+    filters.capasso = undefined;
     filters.year = undefined;
   }
 
   // Subscribers: always available-only; keep license out of the URL.
   // Non-staff: strip samro and year from the shareable/clean query.
   const queryFilters: TrackFilters = subscriber
-    ? { ...filters, license: "all", samro: undefined, year: undefined }
+    ? { ...filters, license: "all", samro: undefined, capasso: undefined, year: undefined }
     : staff
       ? filters
-      : { ...filters, samro: undefined, year: undefined };
+      : { ...filters, samro: undefined, capasso: undefined, year: undefined };
   const cleanQuery = catalogFiltersToQuery(queryFilters);
   const incomingQuery = catalogFiltersToQuery(parseCatalogFilters(params));
   const licenseInUrl = Array.isArray(params.license) ? params.license[0] : params.license;
   const samroInUrl = Array.isArray(params.samro) ? params.samro[0] : params.samro;
+  const capassoInUrl = Array.isArray(params.capasso) ? params.capasso[0] : params.capasso;
   const yearInUrl = Array.isArray(params.year) ? params.year[0] : params.year;
   if (
     incomingQuery !== cleanQuery ||
     (subscriber && licenseInUrl) ||
     (!staff && samroInUrl) ||
+    (!staff && capassoInUrl) ||
     (!staff && yearInUrl)
   ) {
     redirect(cleanQuery ? `/?${cleanQuery}` : "/");
@@ -90,8 +96,15 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
   const metaSuggestions = staff ? getCatalogMetaSuggestions() : undefined;
   const filterOptions = getFilterOptions();
 
-  const prepareProMode = staff && filters.samro === "prepare";
+  const prepareSociety =
+    staff && filters.capasso === "prepare"
+      ? "capasso"
+      : staff && filters.samro === "prepare"
+        ? "samro"
+        : undefined;
+  const prepareProMode = Boolean(prepareSociety);
   const samroProfile = staff ? getSamroProProfileFromSiteSettings() : undefined;
+  const capassoProfile = staff ? getCapassoProProfileFromSiteSettings() : undefined;
   const housePublisherName = staff ? getHousePublisherName() : "";
   let composers: ReturnType<typeof listComposersForPicker> = [];
   if (staff) {
@@ -140,20 +153,30 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
         <header className="mb-4 border-b border-[var(--line)] px-4 pb-4 lg:mb-6 lg:px-6 lg:pb-5">
           <h1 className="flex flex-wrap items-center gap-2 text-xl font-semibold tracking-tight text-[var(--ink)] lg:text-3xl">
             Browse
-            {prepareProMode ? <PrepareProInfo /> : null}
+            {prepareProMode ? (
+              <PrepareProInfo kind={prepareSociety === "capasso" ? "capasso" : "samro"} />
+            ) : null}
           </h1>
           <p className="mt-1 hidden text-sm text-[var(--ink-dim)] lg:block">
-            {prepareProMode
-              ? "Licensed tracks not yet submitted to SAMRO — select Ready tracks (one publisher) to export a form."
+            {prepareSociety === "capasso"
+              ? "House-published Library, Exclusive, and On Hold tracks not yet submitted to Capasso — select Ready tracks to export an SWI."
+              : prepareSociety === "samro"
+                ? "Licensed tracks not yet submitted to SAMRO — select Ready tracks (one publisher) to export a form."
               : subscriber
                 ? "Listen and shortlist available tracks."
                 : "Filter, listen, and shortlist tracks for licensing."}
           </p>
           {prepareProMode ? (
             <p className="mt-2 text-xs text-[var(--ink-dim)]">
-              <a href="/admin/samro" className="text-[var(--accent)] hover:underline">
-                SAMRO submission log
-              </a>
+              {prepareSociety === "capasso" ? (
+                <a href="/admin/capasso" className="text-[var(--accent)] hover:underline">
+                  Capasso submission log
+                </a>
+              ) : (
+                <a href="/admin/samro" className="text-[var(--accent)] hover:underline">
+                  SAMRO submission log
+                </a>
+              )}
               {" · "}
               <a href="/admin/composers" className="text-[var(--accent)] hover:underline">
                 Composers registry
@@ -183,7 +206,9 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
           composers={composers}
           subscriberView={subscriber}
           prepareProMode={prepareProMode}
+          prepareSociety={prepareSociety}
           samroProfile={samroProfile}
+          capassoProfile={capassoProfile}
           housePublisherName={housePublisherName}
         />
       </main>

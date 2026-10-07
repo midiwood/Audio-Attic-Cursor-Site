@@ -1,14 +1,17 @@
 /**
- * Import pipeline — prepare → AI tag → normalize → confirm.
+ * Import pipeline — normalize (browser wasm) → AI tag → confirm.
  * Pure helpers + API calls; React state lives in ImportForm.
  */
 
 import { formatAiError, isAiQuotaError } from "@/lib/ai-errors";
+import { normalizeFileToMinus16LufsMp3 } from "@/lib/audio-normalize-client";
 import {
   filenameFromDropboxUrl,
   titleFromDropboxUrl,
   titleFromFilename,
 } from "@/lib/tracks";
+import { waveformPeaksFromBlob, type ClientWaveformPeaks } from "@/lib/waveform-peaks-client";
+import { waveformApiUrl } from "@/lib/waveform";
 
 export type ImportDraftTrack = {
   clientId: string;
@@ -19,9 +22,14 @@ export type ImportDraftTrack = {
   dropboxPath?: string;
   sourceDropboxPath?: string;
   sourceFolderLink?: string;
+  masterObjectKey?: string | null;
   vaultReady?: boolean;
   localOnly?: boolean;
   localFile?: File;
+  /** −16 LUFS MP3 from browser ffmpeg.wasm (prefer for AI + vault). */
+  normalizedMp3Blob?: Blob;
+  /** Client WaveSurfer peaks — PUT after import assigns catalog ids. */
+  waveformPeaks?: ClientWaveformPeaks | null;
   workingTitle: string;
   libraryTitle: string;
   description: string;
@@ -42,8 +50,8 @@ export type AiSessionOpts = {
 
 export const IMPORT_PIPELINE_STEPS = [
   { id: "prepare", label: "Prepare" },
-  { id: "ai", label: "AI tag" },
   { id: "normalize", label: "Normalize" },
+  { id: "ai", label: "AI tag" },
   { id: "import", label: "Import" },
 ] as const;
 
@@ -112,6 +120,7 @@ export type VaultPrepareResult = {
   dropboxPath: string;
   sourceDropboxPath?: string | null;
   sourceFolderLink?: string | null;
+  masterObjectKey?: string | null;
 };
 
 /** Keep AI-populated fields when vault staging updates paths. */
@@ -128,8 +137,12 @@ export function mergeVaultOntoDraft(
     dropboxPath: vault.dropboxPath ?? existing.dropboxPath,
     sourceDropboxPath: vault.sourceDropboxPath ?? existing.sourceDropboxPath,
     sourceFolderLink: vault.sourceFolderLink ?? existing.sourceFolderLink,
+    masterObjectKey: vault.masterObjectKey ?? existing.masterObjectKey,
     vaultReady: vault.vaultReady ?? existing.vaultReady,
     localOnly: vault.localOnly ?? existing.localOnly,
+    normalizedMp3Blob: vault.normalizedMp3Blob ?? existing.normalizedMp3Blob,
+    waveformPeaks:
+      vault.waveformPeaks !== undefined ? vault.waveformPeaks : existing.waveformPeaks,
   };
 }
 
@@ -249,7 +262,12 @@ export async function attachAudioBlobForAi(
   let blob: Blob | null = null;
   let filename = `${(track.trackId || track.workingTitle || track.libraryTitle || "track").replace(/[^\w.\- ]+/g, "_")}.mp3`;
 
-  if (track.localFile) {
+  if (track.normalizedMp3Blob) {
+    blob = track.normalizedMp3Blob;
+    filename = filename.replace(/\.[^.]+$/i, "") + ".mp3";
+  }
+
+  if (!blob && track.localFile) {
     blob = track.localFile;
     filename = track.localFile.name || filename;
   }
@@ -277,7 +295,12 @@ export async function attachAudioBlobForAi(
 
 export async function prepareVaultForTrack(
   track: ImportDraftTrack,
-): Promise<VaultPrepareResult> {
+): Promise<
+  VaultPrepareResult & {
+    normalizedMp3Blob?: Blob;
+    waveformPeaks?: ClientWaveformPeaks | null;
+  }
+> {
   if (track.vaultReady && track.dropboxPath) {
     return {
       stagingId: track.stagingId,
@@ -286,13 +309,27 @@ export async function prepareVaultForTrack(
       dropboxPath: track.dropboxPath,
       sourceDropboxPath: track.sourceDropboxPath ?? null,
       sourceFolderLink: track.sourceFolderLink ?? null,
+      masterObjectKey: track.masterObjectKey ?? null,
+      normalizedMp3Blob: track.normalizedMp3Blob,
+      waveformPeaks: track.waveformPeaks,
     };
   }
 
-  const form = new FormData();
-  if (track.localFile) {
-    form.append("audio", track.localFile, track.localFile.name);
+  if (!track.localFile) {
+    throw new Error(`No local file for ${track.workingTitle || "track"}`);
   }
+
+  const normalized = await normalizeFileToMinus16LufsMp3(track.localFile);
+  const mp3File = new File(
+    [normalized.mp3],
+    `${(track.workingTitle || "track").replace(/[^\w.\- ]+/g, "_")}.mp3`,
+    { type: "audio/mpeg" },
+  );
+
+  const form = new FormData();
+  form.append("normalized", "1");
+  form.append("audio", mp3File, mp3File.name);
+  form.append("master", normalized.master, normalized.master.name || `original.${normalized.masterExt}`);
   if (track.stagingId) {
     form.append("stagingId", track.stagingId);
   }
@@ -304,7 +341,9 @@ export async function prepareVaultForTrack(
     throw new Error(data.error || `Vault prepare failed for ${track.workingTitle || "track"}`);
   }
 
-  return data;
+  const waveformPeaks = await waveformPeaksFromBlob(normalized.mp3);
+
+  return { ...data, normalizedMp3Blob: normalized.mp3, waveformPeaks };
 }
 
 export type TagTracksResult = {
@@ -415,17 +454,24 @@ export async function normalizeTracksToVault(opts: {
   for (let index = 0; index < tracks.length; index++) {
     const track = tracks[index];
     if (index > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 600));
+      await new Promise((resolve) => setTimeout(resolve, 400));
     }
     onTrackProgress?.(
       index + 1,
       tracks.length,
       tracks.length === 1
-        ? "Converting & normalizing to −16 LUFS…"
-        : `Normalizing ${index + 1}/${tracks.length} to −16 LUFS…`,
+        ? "Browser convert & −16 LUFS (ffmpeg.wasm)…"
+        : `Normalizing ${index + 1}/${tracks.length} in browser…`,
     );
 
     const vault = await prepareVaultForTrack(track);
+    let waveformPeaks = vault.waveformPeaks ?? track.waveformPeaks ?? null;
+    if (!waveformPeaks) {
+      const blob = vault.normalizedMp3Blob || track.normalizedMp3Blob || track.localFile;
+      if (blob) {
+        waveformPeaks = await waveformPeaksFromBlob(blob);
+      }
+    }
     out.push(
       mergeVaultOntoDraft(track, {
         stagingId: vault.stagingId,
@@ -435,6 +481,9 @@ export async function normalizeTracksToVault(opts: {
         dropboxPath: vault.dropboxPath,
         sourceDropboxPath: vault.sourceDropboxPath || undefined,
         sourceFolderLink: vault.sourceFolderLink || undefined,
+        masterObjectKey: vault.masterObjectKey ?? null,
+        normalizedMp3Blob: vault.normalizedMp3Blob,
+        waveformPeaks,
         vaultReady: true,
         localOnly: false,
       }),
@@ -442,6 +491,38 @@ export async function normalizeTracksToVault(opts: {
   }
 
   return out;
+}
+
+/** Persist client-built peaks after import assigns catalog ids. Soft-fail per track. */
+export async function persistImportWaveformPeaks(
+  tracks: ImportDraftTrack[],
+  ids: string[],
+): Promise<{ ok: number; failed: number }> {
+  let ok = 0;
+  let failed = 0;
+
+  for (let i = 0; i < tracks.length; i++) {
+    const id = String(ids[i] || "").trim();
+    const peaks = tracks[i]?.waveformPeaks;
+    if (!id || !peaks?.peaks?.length || !(peaks.duration > 0)) {
+      if (peaks) failed += 1;
+      continue;
+    }
+    try {
+      const res = await fetch(waveformApiUrl(id), {
+        method: "PUT",
+        credentials: "same-origin",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ peaks: peaks.peaks, duration: peaks.duration }),
+      });
+      if (res.ok) ok += 1;
+      else failed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+
+  return { ok, failed };
 }
 
 export function aiTagsReadyMessage(opts: {

@@ -23,7 +23,10 @@ export const SETTINGS = {
   PUBLISHER_PRO_RELATION: "publisher.proRelationNumber",
   PUBLISHER_PRO_IPI_BASE: "publisher.proIpiBaseNumber",
   PUBLISHER_PRO_PA_IPI: "publisher.proPaIpiNameNumber",
+  PUBLISHER_CAPASSO_CAA: "publisher.capassoCaaNumber",
 } as const;
+
+export const DEFAULT_CAPASSO_CAA = "CCA001317";
 
 export type SettingKey = (typeof SETTINGS)[keyof typeof SETTINGS];
 

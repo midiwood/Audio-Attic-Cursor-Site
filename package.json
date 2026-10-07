@@ -25,6 +25,8 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1124.0",
     "@aws-sdk/s3-request-presigner": "^3.1124.0",
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "@wavesurfer/react": "^1.0.12",
     "archiver": "^8.0.0",
     "better-auth": "^1.6.27",

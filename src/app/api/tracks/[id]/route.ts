@@ -47,6 +47,7 @@ type UpdateBody = {
   instruments?: string;
   attributes?: string;
   samro?: string;
+  capasso?: string;
   license?: string;
   licenseDetail?: string;
   perpetuity?: string;
@@ -180,6 +181,7 @@ export async function PATCH(
     instruments,
     attributes,
     samro: String(body.samro ?? existing.samro ?? "No").trim() || "No",
+    capasso: String(body.capasso ?? existing.capasso ?? "No").trim() || "No",
     license,
     licenseDetail: fields.detail
       ? String(body.licenseDetail ?? "").trim() || null

@@ -1,3 +1,5 @@
+import { clearSortDirParams } from "@/lib/catalog-sort";
+
 const STORAGE_KEY = "audio-attic:catalog-filters";
 const EVENT = "audio-attic:catalog-filters";
 
@@ -6,7 +8,7 @@ function withoutSort(query: string): string {
   if (!query) return "";
   const params = new URLSearchParams(query.startsWith("?") ? query.slice(1) : query);
   params.delete("sort");
-  params.delete("dir");
+  clearSortDirParams(params);
   return params.toString();
 }
 

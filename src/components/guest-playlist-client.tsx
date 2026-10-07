@@ -25,6 +25,8 @@ export function GuestPlaylistClient({
           dropboxDl: t.dropboxDl,
           dropboxPath: t.dropboxPath,
           license: t.license,
+          audioSrc: t.audioSrc,
+          waveformApi: t.waveformApi,
         })),
     [tracks],
   );

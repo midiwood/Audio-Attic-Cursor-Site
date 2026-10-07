@@ -25,6 +25,11 @@ import {
   type CatalogSortDir,
 } from "@/lib/catalog-sort";
 import { isSamroSubmitted, assessSamroReadiness, type SamroProProfile } from "@/lib/samro";
+import {
+  assessCapassoReadiness,
+  isCapassoSubmitted,
+  type CapassoProProfile,
+} from "@/lib/capasso";
 
 export type { TrackListItem } from "@/lib/track-list-item";
 export type { CatalogSort, CatalogSortDir } from "@/lib/catalog-sort";
@@ -42,7 +47,7 @@ function SamroStatusChip({
     return (
       <span
         className="inline-flex shrink-0 items-center rounded bg-[var(--available)]/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-[var(--available)]"
-        title="Ready for SAMRO export"
+        title="Ready for export"
       >
         Ready
       </span>
@@ -79,12 +84,12 @@ function SamroStatusChip({
   );
 }
 
-function SamroSubmittedMark() {
+function ProSubmittedMark({ society }: { society: string }) {
   return (
     <span
       className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--available)]/15 text-[var(--available)]"
-      title="Submitted to SAMRO"
-      aria-label="Submitted to SAMRO"
+      title={`Submitted to ${society}`}
+      aria-label={`Submitted to ${society}`}
     >
       <svg className="h-2.5 w-2.5" viewBox="0 0 12 12" fill="none" aria-hidden>
         <path
@@ -99,21 +104,27 @@ function SamroSubmittedMark() {
   );
 }
 
-function SamroCell({ submitted }: { submitted: boolean }) {
+function ProSubmittedCell({
+  submitted,
+  society,
+}: {
+  submitted: boolean;
+  society: string;
+}) {
   if (!submitted) {
     return (
-      <span className="text-xs text-[var(--ink-dim)]" title="Not submitted to SAMRO">
+      <span className="text-xs text-[var(--ink-dim)]" title={`Not submitted to ${society}`}>
         —
       </span>
     );
   }
-  return <SamroSubmittedMark />;
+  return <ProSubmittedMark society={society} />;
 }
 
 const GRID_COLS =
   "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_64px_56px_88px_100px_130px]";
-const GRID_COLS_WITH_SAMRO =
-  "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_64px_56px_88px_56px_100px_130px]";
+const GRID_COLS_WITH_PRO =
+  "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_64px_56px_88px_64px_88px_100px_130px]";
 const GRID_COLS_SUBSCRIBER =
   "xl:grid-cols-[44px_minmax(0,1.4fr)_minmax(0,0.85fr)_56px_130px]";
 /** Prepare PRO: title → status → year → added → actions (no genre/BPM). */
@@ -152,6 +163,8 @@ function toPlayerTrack(track: TrackListItem, subscriberView = false): PlayerTrac
     dropboxDl: track.dropboxDl,
     dropboxPath: track.dropboxPath,
     license: track.license,
+    audioSrc: track.audioSrc,
+    waveformApi: track.waveformApi,
   };
 }
 
@@ -256,8 +269,10 @@ export function TrackList({
   sortDir = "desc",
   onSortChange,
   prepareProMode = false,
+  prepareSociety,
   selectionMode = false,
   samroProfile,
+  capassoProfile,
   housePublisherName = "",
   selectedIds,
   onToggleSelect,
@@ -286,9 +301,11 @@ export function TrackList({
   onSortChange?: (sort: CatalogSort, dir: CatalogSortDir) => void;
   /** Staff Prepare PRO filter — selection + Ready/Incomplete. */
   prepareProMode?: boolean;
+  prepareSociety?: "samro" | "capasso";
   /** Row checkboxes for batch edit (Prepare PRO or staff Browse). */
   selectionMode?: boolean;
   samroProfile?: SamroProProfile;
+  capassoProfile?: CapassoProProfile;
   housePublisherName?: string;
   selectedIds?: Set<string>;
   onToggleSelect?: (trackId: string) => void;
@@ -328,14 +345,14 @@ export function TrackList({
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const currentId = current?.id ?? null;
   currentIdRef.current = currentId;
-  const showSamro = canEdit && !subscriberView;
+  const showPro = canEdit && !subscriberView;
   const showSelection = selectionMode || prepareProMode;
   const gridCols = prepareProMode
     ? GRID_COLS_PREPARE
     : subscriberView
       ? GRID_COLS_SUBSCRIBER
-      : showSamro
-        ? GRID_COLS_WITH_SAMRO
+      : showPro
+        ? GRID_COLS_WITH_PRO
         : GRID_COLS;
   const mobileGridCols =
     prepareProMode || showSelection
@@ -502,8 +519,9 @@ export function TrackList({
         )}
         {prepareProMode ? null : (
           <>
-            {showSamro ? <span>SAMRO</span> : null}
-            {subscriberView ? null : <span>License</span>}
+            {showPro ? <span className="whitespace-nowrap">SAMRO</span> : null}
+            {showPro ? <span className="whitespace-nowrap">CAPASSO</span> : null}
+            {subscriberView ? null : <span className="whitespace-nowrap">License</span>}
           </>
         )}
         <span className="text-right">Actions</span>
@@ -532,9 +550,11 @@ export function TrackList({
               : [track.client, track.project, track.duration].filter(Boolean).join(" · ") ||
                 track.id;
           const readiness =
-            prepareProMode && samroProfile
-              ? assessSamroReadiness(track, samroProfile)
-              : null;
+            prepareProMode && prepareSociety === "capasso" && capassoProfile
+              ? assessCapassoReadiness(track, capassoProfile)
+              : prepareProMode && samroProfile
+                ? assessSamroReadiness(track, samroProfile)
+                : null;
           const selected = selectedIds?.has(track.id) ?? false;
           const prepareHighlight = prepareProMode;
 
@@ -593,65 +613,42 @@ export function TrackList({
                   </button>
                 </div>
 
-                <div className="min-w-0">
-                  <button
-                    type="button"
-                    disabled={!canPlay}
-                    onClick={handlePlay}
-                    className="block w-full text-left transition disabled:cursor-not-allowed disabled:opacity-50"
-                    aria-label={active && isPlaying ? `Pause ${title}` : `Play ${title}`}
-                  >
-                    <span className="block truncate text-[15px] font-medium text-[var(--ink)] hover:text-[var(--accent)] lg:text-base">
-                      {title}
-                    </span>
-                    <span className="mt-0.5 flex items-center gap-2">
-                      <span className="min-w-0 truncate text-xs text-[var(--ink-dim)]">
-                        {subtitle || "\u00a0"}
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                    <button
+                      type="button"
+                      disabled={!canPlay}
+                      onClick={handlePlay}
+                      className="block w-full text-left transition disabled:cursor-not-allowed disabled:opacity-50"
+                      aria-label={active && isPlaying ? `Pause ${title}` : `Play ${title}`}
+                    >
+                      <span className="block truncate text-[15px] font-medium text-[var(--ink)] hover:text-[var(--accent)] lg:text-base">
+                        {title}
                       </span>
-                      {!subscriberView && lineage.length ? (
-                        <span
-                          className="shrink-0 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--accent)]"
-                          title={
-                            lineage.length === 1
-                              ? "1 lineage link"
-                              : `${lineage.length} lineage links`
-                          }
-                        >
-                          Linked
+                      <span className="mt-0.5 flex items-center gap-2">
+                        <span className="min-w-0 truncate text-xs text-[var(--ink-dim)]">
+                          {subtitle || "\u00a0"}
                         </span>
-                      ) : null}
-                    </span>
-                  </button>
-                  <div className="hidden mt-2 flex-wrap items-center gap-2 xl:hidden">
-                    {showSamro && readiness ? (
-                      <SamroStatusChip
-                        ready={readiness.ready}
-                        missing={readiness.missing}
-                        detailed={prepareProMode}
-                      />
-                    ) : showSamro ? (
-                      isSamroSubmitted(track.samro) ? (
-                        <SamroSubmittedMark />
-                      ) : (
-                        <span className="text-[10px] uppercase tracking-[0.12em] text-[var(--ink-dim)]">
-                          SAMRO —
-                        </span>
-                      )
-                    ) : null}
-                    {subscriberView ? null : <LicenseBadge license={track.license} />}
-                    {subscriberView ? null : track.year ? (
-                      <span className="text-xs text-[var(--ink-dim)]">{track.year}</span>
-                    ) : null}
-                    {!prepareProMode && track.bpm ? (
-                      <span className="text-xs text-[var(--ink-dim)]">{track.bpm} BPM</span>
-                    ) : null}
-                    {subscriberView ? null : (
-                      <span className="text-xs text-[var(--ink-dim)]">{formatAddedDate(track)}</span>
-                    )}
-                    {!prepareProMode && track.musicalKey ? (
-                      <span className="text-xs text-[var(--ink-dim)]">{track.musicalKey}</span>
-                    ) : null}
+                        {!subscriberView && lineage.length ? (
+                          <span
+                            className="shrink-0 rounded bg-[var(--accent-soft)] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--accent)]"
+                            title={
+                              lineage.length === 1
+                                ? "1 lineage link"
+                                : `${lineage.length} lineage links`
+                            }
+                          >
+                            Linked
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
                   </div>
+                  {subscriberView ? null : (
+                    <div className="shrink-0 xl:hidden">
+                      <LicenseBadge license={track.license} />
+                    </div>
+                  )}
                 </div>
 
                 {prepareProMode ? (
@@ -691,17 +688,20 @@ export function TrackList({
                 )}
                 {prepareProMode ? null : (
                   <>
-                    {showSamro ? (
+                    {showPro ? (
                       <div className="hidden xl:flex xl:items-center">
-                        {readiness ? (
-                          <SamroStatusChip
-                            ready={readiness.ready}
-                            missing={readiness.missing}
-                            detailed={prepareProMode}
-                          />
-                        ) : (
-                          <SamroCell submitted={isSamroSubmitted(track.samro)} />
-                        )}
+                        <ProSubmittedCell
+                          submitted={isSamroSubmitted(track.samro)}
+                          society="SAMRO"
+                        />
+                      </div>
+                    ) : null}
+                    {showPro ? (
+                      <div className="hidden xl:flex xl:items-center">
+                        <ProSubmittedCell
+                          submitted={isCapassoSubmitted(track.capasso)}
+                          society="Capasso"
+                        />
                       </div>
                     ) : null}
                     {subscriberView ? null : (

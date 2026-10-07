@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMemo } from "react";
 import { FiltersRail } from "@/components/filters-rail";
-import { defaultSortDir } from "@/lib/catalog-sort";
+import { defaultSortDir, parseSortDirParam } from "@/lib/catalog-sort";
 
 function countListParam(params: URLSearchParams, key: string): number {
   const seen = new Set<string>();
@@ -26,6 +26,8 @@ export function BrowseFiltersRail({ children }: { children: ReactNode }) {
     if (license && license !== "all") count += 1;
     const samro = params.get("samro");
     if (samro === "yes" || samro === "no" || samro === "prepare") count += 1;
+    const capasso = params.get("capasso");
+    if (capasso === "yes" || capasso === "no" || capasso === "prepare") count += 1;
     if (params.get("year")) count += 1;
     for (const key of ["genre", "mood", "instrument", "attribute"]) {
       count += countListParam(params, key);
@@ -35,8 +37,8 @@ export function BrowseFiltersRail({ children }: { children: ReactNode }) {
       sortParam === "title" || sortParam === "year" || sortParam === "bpm" || sortParam === "date"
         ? sortParam
         : "date";
-    const dirParam = params.get("dir");
-    const dir = dirParam === "asc" || dirParam === "desc" ? dirParam : defaultSortDir(sort);
+    const dirParam = parseSortDirParam((key) => params.get(key));
+    const dir = dirParam ?? defaultSortDir(sort);
     if (sort !== "date" || dir !== defaultSortDir("date")) count += 1;
     return count;
   }, [params]);

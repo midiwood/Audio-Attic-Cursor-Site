@@ -31,9 +31,10 @@ const savingPeaks = new Set<string>();
 
 async function fetchStoredPeaks(
   trackId: string,
+  apiUrl?: string | null,
 ): Promise<{ peaks: WaveformPeaks; duration: number } | null> {
   try {
-    const res = await fetch(waveformApiUrl(trackId), {
+    const res = await fetch(apiUrl || waveformApiUrl(trackId), {
       credentials: "same-origin",
       cache: "force-cache",
     });
@@ -93,6 +94,7 @@ export function PlayerWaveform({ height = 36 }: { height?: number }) {
 
   const trackId = current?.id ?? null;
   const audioSrc = current?.audioSrc ?? null;
+  const waveformApi = current?.waveformApi || null;
   const isPreview = Boolean(current?.preview || audioSrc);
 
   useEffect(() => {
@@ -190,29 +192,28 @@ export function PlayerWaveform({ height = 36 }: { height?: number }) {
     let cleanupWs: (() => void) | null = null;
 
     void (async () => {
-      if (!isPreview) {
-        const stored = await fetchStoredPeaks(trackId);
-        if (cancelled) return;
+      const stored = await fetchStoredPeaks(trackId, waveformApi);
+      if (cancelled) return;
 
-        if (stored) {
-          // Peaks-only: no silent media, no remote audio fetch for the waveform.
-          const ws = WaveSurfer.create({
-            ...baseOptions,
-            peaks: stored.peaks,
-            duration: stored.duration,
-          });
-          if (cancelled) {
-            try {
-              ws.destroy();
-            } catch {
-              // ignore
-            }
-            return;
+      if (stored) {
+        const ws = WaveSurfer.create({
+          ...baseOptions,
+          peaks: stored.peaks,
+          duration: stored.duration,
+        });
+        if (cancelled) {
+          try {
+            ws.destroy();
+          } catch {
+            // ignore
           }
-          cleanupWs = bindCommon(ws, false);
           return;
         }
+        cleanupWs = bindCommon(ws, false);
+        return;
+      }
 
+      if (!isPreview) {
         // No stored peaks — avoid fetch to /api/audio (302 → Spaces, blocked by CORS).
         setFailed(true);
         return;
@@ -255,7 +256,7 @@ export function PlayerWaveform({ height = 36 }: { height?: number }) {
       wsRef.current = null;
       cleanupWs?.();
     };
-  }, [trackId, audioSrc, isPreview, height]);
+  }, [trackId, audioSrc, waveformApi, isPreview, height]);
 
   // Sync visual playhead from the real player clock.
   useEffect(() => {

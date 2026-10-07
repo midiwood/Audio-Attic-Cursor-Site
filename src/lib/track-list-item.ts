@@ -19,6 +19,7 @@ export type TrackListItem = {
   instruments: string | null;
   attributes: string | null;
   samro: string | null;
+  capasso: string | null;
   license: string | null;
   licenseDetail: string | null;
   perpetuity: string | null;
@@ -28,6 +29,12 @@ export type TrackListItem = {
   dropboxPath?: string | null;
   sourceDropboxPath?: string | null;
   sourceFolderLink?: string | null;
+  masterObjectKey?: string | null;
+  /** Stream URL for review / preview tracks (bypasses catalog /api/audio). */
+  audioSrc?: string | null;
+  /** Stored WaveSurfer peaks endpoint. */
+  waveformApi?: string | null;
+  downloadHref?: string | null;
   /** Server-resolved SAMRO rights holders (IPI + custom perf shares). */
   composerSlots?: Array<{
     name: string;
@@ -58,6 +65,7 @@ export function toTrackListItem(track: {
   instruments?: string | null;
   attributes?: string | null;
   samro?: string | null;
+  capasso?: string | null;
   license: string | null;
   licenseDetail?: string | null;
   perpetuity?: string | null;
@@ -67,6 +75,7 @@ export function toTrackListItem(track: {
   dropboxPath?: string | null;
   sourceDropboxPath?: string | null;
   sourceFolderLink?: string | null;
+  masterObjectKey?: string | null;
 }): TrackListItem {
   return {
     id: track.id,
@@ -89,6 +98,7 @@ export function toTrackListItem(track: {
     instruments: track.instruments ?? null,
     attributes: track.attributes ?? null,
     samro: track.samro ?? null,
+    capasso: track.capasso ?? null,
     license: track.license,
     licenseDetail: track.licenseDetail ?? null,
     perpetuity: track.perpetuity ?? null,
@@ -98,5 +108,6 @@ export function toTrackListItem(track: {
     dropboxPath: track.dropboxPath ?? null,
     sourceDropboxPath: track.sourceDropboxPath ?? null,
     sourceFolderLink: track.sourceFolderLink ?? null,
+    masterObjectKey: track.masterObjectKey ?? null,
   };
 }

@@ -14,7 +14,7 @@ import {
   clearCatalogFilterQuery,
   saveCatalogFilterQuery,
 } from "@/lib/catalog-filter-storage";
-import { defaultSortDir } from "@/lib/catalog-sort";
+import { defaultSortDir, parseSortDirParam } from "@/lib/catalog-sort";
 import {
   TAG_TONE_FIELD,
   TAG_TONE_LABEL,
@@ -144,7 +144,7 @@ function MultiFacetField({
 }
 
 type SelectedChip = {
-  key: "license" | "samro" | "genre" | "mood" | "instrument" | "attribute";
+  key: "license" | "samro" | "capasso" | "genre" | "mood" | "instrument" | "attribute";
   value: string;
   tone?: TagTone;
 };
@@ -165,7 +165,7 @@ export function CatalogFilters({
   /** Tracks matching the current filter URL (for sidebar count). */
   matchCount?: number;
   hideLicenseFilter?: boolean;
-  /** Staff-only: filter by SAMRO PRO submission. */
+  /** Staff-only: filter by SAMRO / Capasso PRO submission. */
   showSamroFilter?: boolean;
   /** Staff-only: filter by year. */
   showYearFilter?: boolean;
@@ -226,6 +226,13 @@ export function CatalogFilters({
   const yearValue = params.get("year") ?? "";
   const licenseValue = params.get("license") ?? "all";
   const samroValue = params.get("samro") ?? "all";
+  const capassoValue = params.get("capasso") ?? "all";
+  const proSelectValue =
+    capassoValue === "yes" || capassoValue === "no" || capassoValue === "prepare"
+      ? `capasso:${capassoValue}`
+      : samroValue === "yes" || samroValue === "no" || samroValue === "prepare"
+        ? `samro:${samroValue}`
+        : "all";
 
   const hasActiveFilters = useMemo(() => {
     const licenseActive =
@@ -233,18 +240,22 @@ export function CatalogFilters({
     const samroActive =
       showSamroFilter &&
       (samroValue === "yes" || samroValue === "no" || samroValue === "prepare");
+    const capassoActive =
+      showSamroFilter &&
+      (capassoValue === "yes" || capassoValue === "no" || capassoValue === "prepare");
     const sortParam = params.get("sort");
     const sort =
       sortParam === "title" || sortParam === "year" || sortParam === "bpm" || sortParam === "date"
         ? sortParam
         : "date";
-    const dirParam = params.get("dir");
-    const dir = dirParam === "asc" || dirParam === "desc" ? dirParam : defaultSortDir(sort);
+    const dirParam = parseSortDirParam((key) => params.get(key));
+    const dir = dirParam ?? defaultSortDir(sort);
     const sortActive = sort !== "date" || dir !== defaultSortDir("date");
     return (
       Boolean(params.get("q")) ||
       licenseActive ||
       samroActive ||
+      capassoActive ||
       sortActive ||
       genreValues.length > 0 ||
       moodValues.length > 0 ||
@@ -259,6 +270,7 @@ export function CatalogFilters({
     showYearFilter,
     licenseValue,
     samroValue,
+    capassoValue,
     genreValues,
     moodValues,
     instrumentValues,
@@ -292,12 +304,25 @@ export function CatalogFilters({
         !value ||
         (key === "license" && value === "all") ||
         (key === "samro" && value === "all") ||
+        (key === "capasso" && value === "all") ||
         (key === "sort" && value === "date")
       ) {
         next.delete(key);
       } else {
         next.set(key, value);
       }
+      pushParams(next);
+    },
+    [params, pushParams],
+  );
+
+  const updatePro = useCallback(
+    (value: string) => {
+      const next = new URLSearchParams(params.toString());
+      next.delete("samro");
+      next.delete("capasso");
+      if (value.startsWith("samro:")) next.set("samro", value.slice("samro:".length));
+      if (value.startsWith("capasso:")) next.set("capasso", value.slice("capasso:".length));
       pushParams(next);
     },
     [params, pushParams],
@@ -366,7 +391,14 @@ export function CatalogFilters({
     } else if (showSamroFilter && samroValue === "no") {
       chips.push({ key: "samro", value: "SAMRO not submitted" });
     } else if (showSamroFilter && samroValue === "prepare") {
-      chips.push({ key: "samro", value: "Prepare PRO" });
+      chips.push({ key: "samro", value: "SAMRO Prepare" });
+    }
+    if (showSamroFilter && capassoValue === "yes") {
+      chips.push({ key: "capasso", value: "Capasso submitted" });
+    } else if (showSamroFilter && capassoValue === "no") {
+      chips.push({ key: "capasso", value: "Capasso not submitted" });
+    } else if (showSamroFilter && capassoValue === "prepare") {
+      chips.push({ key: "capasso", value: "Capasso Prepare" });
     }
     for (const value of genreValues) chips.push({ key: "genre", value, tone: "genre" });
     for (const value of moodValues) chips.push({ key: "mood", value, tone: "mood" });
@@ -380,6 +412,7 @@ export function CatalogFilters({
     showSamroFilter,
     licenseValue,
     samroValue,
+    capassoValue,
     genreValues,
     moodValues,
     instrumentValues,
@@ -394,6 +427,10 @@ export function CatalogFilters({
       }
       if (chip.key === "samro") {
         update("samro", "all");
+        return;
+      }
+      if (chip.key === "capasso") {
+        update("capasso", "all");
         return;
       }
       const current =
@@ -539,25 +576,28 @@ export function CatalogFilters({
               <FilterRow
                 label={
                   <span className="inline-flex items-center gap-1">
-                    SAMRO
-                    <PrepareProInfo />
+                    PRO
+                    <PrepareProInfo kind="pro" />
                   </span>
                 }
               >
                 <select
                   className={`catalog-filter-select ${fieldClass}`}
-                  value={
-                    samroValue === "yes" || samroValue === "no" || samroValue === "prepare"
-                      ? samroValue
-                      : "all"
-                  }
-                  onChange={(e) => update("samro", e.target.value)}
-                  title="SAMRO PRO submission status"
+                  value={proSelectValue}
+                  onChange={(e) => updatePro(e.target.value)}
+                  title="SAMRO and Capasso submission status"
                 >
                   <option value="all">All tracks</option>
-                  <option value="prepare">Prepare PRO</option>
-                  <option value="yes">Submitted</option>
-                  <option value="no">Not submitted</option>
+                  <optgroup label="SAMRO">
+                    <option value="samro:prepare">Prepare</option>
+                    <option value="samro:yes">Submitted</option>
+                    <option value="samro:no">Not submitted</option>
+                  </optgroup>
+                  <optgroup label="Capasso">
+                    <option value="capasso:prepare">Prepare</option>
+                    <option value="capasso:yes">Submitted</option>
+                    <option value="capasso:no">Not submitted</option>
+                  </optgroup>
                 </select>
               </FilterRow>
             ) : null}

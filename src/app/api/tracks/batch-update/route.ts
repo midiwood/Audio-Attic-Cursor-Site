@@ -104,6 +104,7 @@ function applyPatch(existing: Track, patch: BatchPatch): Track {
     instruments: existing.instruments,
     attributes: existing.attributes,
     samro: existing.samro,
+    capasso: existing.capasso,
     license: patch.license?.trim() ? license : existing.license,
     licenseDetail: fields.detail ? existing.licenseDetail : null,
     perpetuity: fields.perpetuity ? existing.perpetuity : null,

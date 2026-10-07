@@ -37,6 +37,8 @@ export type PlayerTrack = {
    * When set, the bottom player uses this instead of `/api/audio?id=…`.
    */
   audioSrc?: string | null;
+  /** Stored WaveSurfer peaks endpoint (defaults to /api/tracks/:id/waveform). */
+  waveformApi?: string | null;
   /** Ephemeral preview — hide download / playlist actions. */
   preview?: boolean;
 };
