@@ -26,6 +26,7 @@ export async function GET(req: NextRequest) {
   filters.samro = undefined;
   filters.capasso = undefined;
   filters.year = undefined;
+  filters.publisher = undefined;
 
   const bpm = partnerBpmRange(params);
   if (bpm.bpmMin != null) filters.bpmMin = bpm.bpmMin;

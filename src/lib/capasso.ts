@@ -1,5 +1,6 @@
 /** Capasso SWI mechanical registration — client-safe, no DB imports. */
 
+import { parsePublisherNames } from "@/lib/publisher-shared";
 import { formatDisplayTitle, normalizeLicenseStatus } from "@/lib/tracks";
 import { samroWorkingSubtitle, type SamroComposerSlot } from "@/lib/samro";
 import type { TrackListItem } from "@/lib/track-list-item";
@@ -77,38 +78,23 @@ export function parseCapassoPublishers(
   publisher: string | null | undefined,
   houseName?: string,
 ): string[] {
-  const text = (publisher || "").trim();
-  if (!text) return [];
-  const primary = uniquePublisherParts(
-    text.split(/\s*(?:,|;|\||\s+and\s+|\s*&\s*|\s+\/\s+)\s*/i),
-  );
+  const primary = parsePublisherNames(publisher);
   const house = (houseName || "").trim().toLowerCase();
   if (!house || primary.some((part) => part.toLowerCase() === house)) return primary;
 
   const expanded: string[] = [];
   for (const token of primary) {
-    const segs = uniquePublisherParts(token.split("/"));
+    const segs = token
+      .split("/")
+      .map((part) => part.trim())
+      .filter(Boolean);
     if (segs.length > 1 && segs.some((seg) => seg.toLowerCase() === house)) {
       expanded.push(...segs);
     } else {
       expanded.push(token);
     }
   }
-  return uniquePublisherParts(expanded);
-}
-
-function uniquePublisherParts(parts: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const part of parts) {
-    const trimmed = part.trim();
-    if (!trimmed) continue;
-    const key = trimmed.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(trimmed);
-  }
-  return out;
+  return parsePublisherNames(expanded.join(", "));
 }
 
 export function isHousePublisher(

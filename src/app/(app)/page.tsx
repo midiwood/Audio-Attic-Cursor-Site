@@ -50,27 +50,30 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
     filters.samro = undefined;
     filters.capasso = undefined;
     filters.year = undefined;
+    filters.publisher = undefined;
   }
 
   // Subscribers: always available-only; keep license out of the URL.
   // Non-staff: strip samro and year from the shareable/clean query.
   const queryFilters: TrackFilters = subscriber
-    ? { ...filters, license: "all", samro: undefined, capasso: undefined, year: undefined }
+    ? { ...filters, license: "all", samro: undefined, capasso: undefined, year: undefined, publisher: undefined }
     : staff
       ? filters
-      : { ...filters, samro: undefined, capasso: undefined, year: undefined };
+      : { ...filters, samro: undefined, capasso: undefined, year: undefined, publisher: undefined };
   const cleanQuery = catalogFiltersToQuery(queryFilters);
   const incomingQuery = catalogFiltersToQuery(parseCatalogFilters(params));
   const licenseInUrl = Array.isArray(params.license) ? params.license[0] : params.license;
   const samroInUrl = Array.isArray(params.samro) ? params.samro[0] : params.samro;
   const capassoInUrl = Array.isArray(params.capasso) ? params.capasso[0] : params.capasso;
   const yearInUrl = Array.isArray(params.year) ? params.year[0] : params.year;
+  const publisherInUrl = Array.isArray(params.publisher) ? params.publisher[0] : params.publisher;
   if (
     incomingQuery !== cleanQuery ||
     (subscriber && licenseInUrl) ||
     (!staff && samroInUrl) ||
     (!staff && capassoInUrl) ||
-    (!staff && yearInUrl)
+    (!staff && yearInUrl) ||
+    (!staff && publisherInUrl)
   ) {
     redirect(cleanQuery ? `/?${cleanQuery}` : "/");
   }
@@ -133,6 +136,7 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
               instruments: vocabulary.instruments,
               usages: vocabulary.attributes,
               years: filterOptions.years,
+              publishers: filterOptions.publishers,
             }}
             available={{
               genres: facets.genres,
@@ -140,12 +144,15 @@ export default async function HomePage({ searchParams }: { searchParams: SearchP
               instruments: facets.instruments,
               usages: facets.usages,
               years: facets.years,
+              publishers: facets.publishers,
+              publisherNone: facets.publisherNone,
               licenses: facets.licenses,
             }}
             matchCount={total}
             hideLicenseFilter={subscriber}
             showSamroFilter={staff}
             showYearFilter={staff}
+            showPublisherFilter={staff}
           />
         </BrowseFiltersRail>
       </Suspense>
