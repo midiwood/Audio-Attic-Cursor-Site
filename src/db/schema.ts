@@ -242,6 +242,30 @@ export const trackAudioAssets = sqliteTable(
   ],
 );
 
+/** Previous catalog main mixes — snapshot before Replace, so staff can revert. */
+export const trackMixRevisions = sqliteTable(
+  "track_mix_revisions",
+  {
+    id: text("id").primaryKey(),
+    trackId: text("track_id")
+      .notNull()
+      .references(() => tracks.id, { onDelete: "cascade" }),
+    /** Filename of the mix that replaced this snapshot. */
+    replacedWith: text("replaced_with"),
+    replacedBy: text("replaced_by"),
+    duration: text("duration"),
+    dropboxPath: text("dropbox_path"),
+    masterObjectKey: text("master_object_key"),
+    /** JSON peaks payload so restore does not need server ffmpeg. */
+    peaksJson: text("peaks_json"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("track_mix_revisions_track_idx").on(table.trackId)],
+);
+
+export type TrackMixRevision = typeof trackMixRevisions.$inferSelect;
+export type NewTrackMixRevision = typeof trackMixRevisions.$inferInsert;
+
 /** Past/current Library (and similar) deals — many per track. Staff only. */
 export const trackLicenseEntries = sqliteTable(
   "track_license_entries",

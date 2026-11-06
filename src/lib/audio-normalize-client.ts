@@ -132,13 +132,7 @@ export async function normalizeFileToMinus16LufsMp3(
   }
 
   const data = await ffmpeg.readFile(outputName);
-  const bytes =
-    data instanceof Uint8Array
-      ? data
-      : new TextEncoder().encode(String(data));
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  const mp3 = new Blob([copy.buffer], { type: "audio/mpeg" });
+  const mp3 = blobFromFfmpegBytes(data);
 
   try {
     await ffmpeg.deleteFile(inputName);
@@ -153,5 +147,81 @@ export async function normalizeFileToMinus16LufsMp3(
 
   const masterExt = inExt.replace(/^\./, "") || "wav";
   return { mp3, master: file, masterExt };
+}
+
+function isAlreadyMp3(file: File): boolean {
+  const lower = `${file.name} ${file.type}`.toLowerCase();
+  if (lower.includes("wav") || lower.includes("aiff") || lower.includes("aif")) return false;
+  return /\.mp3(?:$|\?|\s)/i.test(file.name) || file.type.includes("mpeg");
+}
+
+function blobFromFfmpegBytes(data: Uint8Array | string): Blob {
+  const bytes =
+    data instanceof Uint8Array ? data : new TextEncoder().encode(String(data));
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return new Blob([copy.buffer], { type: "audio/mpeg" });
+}
+
+/** Transcode to stereo 44.1k MP3 in the browser — no loudness change (stems). */
+export async function transcodeFileToPlaybackMp3(
+  file: File,
+  opts?: { onProgress?: (message: string) => void },
+): Promise<ClientNormalizeResult> {
+  if (!file.size) throw new Error("No audio file to convert");
+
+  const hint = file.name || file.type || "audio.mp3";
+  const masterExt = extForAudioHint(hint).replace(/^\./, "") || "wav";
+  if (isAlreadyMp3(file)) {
+    return { mp3: file, master: file, masterExt: "mp3" };
+  }
+
+  opts?.onProgress?.("Loading ffmpeg in the browser…");
+  const ffmpeg = await getFfmpeg();
+  const inExt = extForAudioHint(hint);
+  const inputName = `input${inExt}`;
+  const outputName = "track.mp3";
+
+  await ffmpeg.writeFile(inputName, await fetchFile(file));
+  opts?.onProgress?.("Encoding MP3…");
+  const code = await ffmpeg.exec([
+    "-hide_banner",
+    "-y",
+    "-i",
+    inputName,
+    "-ar",
+    "44100",
+    "-ac",
+    "2",
+    "-c:a",
+    "libmp3lame",
+    "-b:a",
+    LOUDNORM_MP3_BITRATE,
+    outputName,
+  ]);
+  if (code !== 0) {
+    throw new Error("Browser ffmpeg failed to encode MP3");
+  }
+
+  const data = await ffmpeg.readFile(outputName);
+  const mp3 = blobFromFfmpegBytes(data);
+
+  try {
+    await ffmpeg.deleteFile(inputName);
+  } catch {
+    /* ignore */
+  }
+  try {
+    await ffmpeg.deleteFile(outputName);
+  } catch {
+    /* ignore */
+  }
+
+  return { mp3, master: file, masterExt };
+}
+
+export function mp3FileFromBlob(blob: Blob, originalName: string): File {
+  const base = originalName.replace(/\.[^.]+$/i, "") || "audio";
+  return new File([blob], `${base}.mp3`, { type: "audio/mpeg" });
 }
 

@@ -892,6 +892,25 @@ CREATE INDEX IF NOT EXISTS capasso_submission_tracks_track_idx ON capasso_submis
   console.error("[db] capasso submission tables failed", err);
 }
 
+try {
+  sqlite.exec(`
+CREATE TABLE IF NOT EXISTS track_mix_revisions (
+  id TEXT PRIMARY KEY,
+  track_id TEXT NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+  replaced_with TEXT,
+  replaced_by TEXT,
+  duration TEXT,
+  dropbox_path TEXT,
+  master_object_key TEXT,
+  peaks_json TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS track_mix_revisions_track_idx ON track_mix_revisions(track_id);
+`);
+} catch (err) {
+  console.error("[db] track_mix_revisions table failed", err);
+}
+
 export const db = drizzle(sqlite, { schema: fullSchema });
 
 export { sqlite, dbPath, dataDir };

@@ -14,6 +14,7 @@ import {
   resolveStemLabel,
   uniqueAssetSlug,
 } from "@/lib/track-assets";
+import { resolveAudioNormalizeMode } from "@/lib/audio-normalize";
 import { ingestTrackAsset, removeTrackAssetFile } from "@/lib/track-assets-ingest";
 import { isAllowedImportAudioUrl, mp3OnlyErrorMessage } from "@/lib/tracks";
 
@@ -74,6 +75,9 @@ export async function POST(req: NextRequest, context: RouteContext) {
   const kindRaw = String(form.get("kind") || "").trim();
   const labelInput = String(form.get("label") || "").trim();
   const file = form.get("audio");
+  const clientNormalized =
+    String(form.get("normalized") || "").trim() === "1" ||
+    String(form.get("clientNormalized") || "").trim() === "1";
 
   if (!isTrackAssetKind(kindRaw)) {
     return NextResponse.json({ error: "kind must be version or stem" }, { status: 400 });
@@ -81,25 +85,39 @@ export async function POST(req: NextRequest, context: RouteContext) {
   if (!(file instanceof File) || file.size <= 0) {
     return NextResponse.json({ error: "audio file is required" }, { status: 400 });
   }
-  if (!isAllowedImportAudioUrl(file.name)) {
+
+  const sourceHint =
+    String(form.get("sourceHint") || "").trim() || file.name;
+  if (!isAllowedImportAudioUrl(sourceHint) && !isAllowedImportAudioUrl(file.name)) {
     return NextResponse.json({ error: mp3OnlyErrorMessage() }, { status: 400 });
+  }
+
+  if (!clientNormalized && resolveAudioNormalizeMode() !== "server") {
+    return NextResponse.json(
+      {
+        error:
+          "Server ffmpeg is muted. Normalize in the browser first, or set AUDIO_NORMALIZE_MODE=server.",
+      },
+      { status: 400 },
+    );
   }
 
   const label =
     kindRaw === "version"
       ? nextVersionLabel(id)
-      : resolveStemLabel(labelInput, file.name);
+      : resolveStemLabel(labelInput, sourceHint);
 
   const slug = uniqueAssetSlug(id, kindRaw, label);
-  const sourceBytes = Buffer.from(await file.arrayBuffer());
+  const audioBytes = Buffer.from(await file.arrayBuffer());
 
   try {
     const vault = await ingestTrackAsset({
       trackId: id,
       kind: kindRaw,
       slug,
-      sourceBytes,
-      sourceHint: file.name,
+      sourceBytes: clientNormalized ? null : audioBytes,
+      sourceHint,
+      preNormalizedMp3: clientNormalized ? audioBytes : null,
     });
 
     const asset = insertTrackAsset({

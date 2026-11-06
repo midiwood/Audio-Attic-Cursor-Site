@@ -138,6 +138,9 @@ export async function generateWaveformPeaksFromBytes(
       duration,
       peaksLength: channel.length,
     };
+  } catch {
+    // CageFS/cPanel: spawn ffmpeg EACCES. Peaks are optional — prefer browser wasm.
+    return null;
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => undefined);
   }
