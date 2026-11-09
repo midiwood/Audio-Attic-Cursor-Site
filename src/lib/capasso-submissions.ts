@@ -318,6 +318,68 @@ export function completeCapassoSubmission(
   return { ok: true, trackCount: submission.trackIds.length };
 }
 
+function trackIdsOnOtherCompletedCapasso(
+  trackIds: string[],
+  exceptSubmissionId: string,
+): Set<string> {
+  if (!trackIds.length) return new Set();
+  const rows = db
+    .select({
+      trackId: capassoSubmissionTracks.trackId,
+      submissionId: capassoSubmissions.id,
+    })
+    .from(capassoSubmissionTracks)
+    .innerJoin(
+      capassoSubmissions,
+      eq(capassoSubmissionTracks.submissionId, capassoSubmissions.id),
+    )
+    .where(
+      and(
+        inArray(capassoSubmissionTracks.trackId, trackIds),
+        eq(capassoSubmissions.status, "completed"),
+        isNull(capassoSubmissions.trashedAt),
+      ),
+    )
+    .all();
+  const keep = new Set<string>();
+  for (const row of rows) {
+    if (row.submissionId !== exceptSubmissionId) keep.add(row.trackId);
+  }
+  return keep;
+}
+
+export function uncompleteCapassoSubmission(
+  id: string,
+): { ok: true; trackCount: number } | { ok: false; error: string; status?: number } {
+  const submission = getCapassoSubmission(id);
+  if (!submission) return { ok: false, error: "Submission not found", status: 404 };
+  if (submission.status !== "completed") {
+    return { ok: false, error: "Only completed submissions can be reversed", status: 400 };
+  }
+
+  const now = new Date().toISOString();
+  const keepSubmitted = trackIdsOnOtherCompletedCapasso(submission.trackIds, id);
+  for (const trackId of submission.trackIds) {
+    if (keepSubmitted.has(trackId)) continue;
+    db.update(tracks)
+      .set({ capasso: "No", updatedAt: now })
+      .where(eq(tracks.id, trackId))
+      .run();
+  }
+
+  db.update(capassoSubmissions)
+    .set({
+      status: submission.exportedAt ? "exported" : "draft",
+      completedAt: null,
+      archivedAt: null,
+      updatedAt: now,
+    })
+    .where(eq(capassoSubmissions.id, id))
+    .run();
+
+  return { ok: true, trackCount: submission.trackIds.length };
+}
+
 export function cancelCapassoSubmission(
   id: string,
 ): { ok: true } | { ok: false; error: string; status?: number } {

@@ -11,6 +11,7 @@ import {
   restoreCapassoSubmission,
   trashCapassoSubmission,
   unarchiveCapassoSubmission,
+  uncompleteCapassoSubmission,
 } from "@/lib/capasso-submissions";
 
 export const runtime = "nodejs";
@@ -77,7 +78,15 @@ export async function PATCH(req: NextRequest) {
 
   const body = (await req.json().catch(() => ({}))) as {
     id?: string;
-    action?: "complete" | "cancel" | "trash" | "restore" | "archive" | "unarchive" | "delete";
+    action?:
+      | "complete"
+      | "uncomplete"
+      | "cancel"
+      | "trash"
+      | "restore"
+      | "archive"
+      | "unarchive"
+      | "delete";
   };
   const id = String(body.id || "").trim();
   if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
@@ -87,6 +96,7 @@ export async function PATCH(req: NextRequest) {
     () => { ok: true; trackCount?: number } | { ok: false; error: string; status?: number }
   > = {
     complete: () => completeCapassoSubmission(id),
+    uncomplete: () => uncompleteCapassoSubmission(id),
     cancel: () => cancelCapassoSubmission(id),
     trash: () => trashCapassoSubmission(id),
     restore: () => restoreCapassoSubmission(id),
