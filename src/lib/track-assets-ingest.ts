@@ -11,8 +11,10 @@ export type IngestTrackAssetInput = {
   trackId: string;
   kind: TrackAssetKind;
   slug: string;
-  sourceBytes: Buffer;
+  sourceBytes?: Buffer | null;
   sourceHint: string;
+  /** Already prepared MP3 from browser wasm (preferred). */
+  preNormalizedMp3?: Buffer | null;
 };
 
 export type IngestTrackAssetResult = {
@@ -25,11 +27,17 @@ export async function ingestTrackAsset(input: IngestTrackAssetInput): Promise<In
   const trackId = input.trackId.trim();
   const slug = input.slug.trim();
   if (!trackId || !slug) throw new Error("trackId and slug are required");
-  if (!input.sourceBytes.length) throw new Error("No audio file provided");
+  if (!input.preNormalizedMp3?.length && !input.sourceBytes?.length) {
+    throw new Error("No audio file provided");
+  }
 
   const hint = input.sourceHint.trim() || "audio.mp3";
   let mp3Bytes: Buffer;
-  if (input.kind === "version") {
+  if (input.preNormalizedMp3?.length) {
+    mp3Bytes = input.preNormalizedMp3;
+  } else if (!input.sourceBytes?.length) {
+    throw new Error("No audio file provided");
+  } else if (input.kind === "version") {
     mp3Bytes = await normalizeToMinus16LufsMp3(input.sourceBytes, hint);
   } else {
     mp3Bytes = await transcodeToPlaybackMp3(input.sourceBytes, hint);

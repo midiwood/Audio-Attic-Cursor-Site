@@ -67,6 +67,25 @@ export function vaultStemMp3Key(trackId: string, slug: string): string {
   return `${vaultPrefix()}/${id}/stems/${key}.mp3`;
 }
 
+export function vaultMixRevisionMp3Key(trackId: string, revisionId: string): string {
+  const id = trackId.trim();
+  const rev = revisionId.trim();
+  if (!id || !rev) throw new Error("trackId and revisionId are required");
+  return `${vaultPrefix()}/${id}/mix-history/${rev}/track.mp3`;
+}
+
+export function vaultMixRevisionMasterKey(
+  trackId: string,
+  revisionId: string,
+  ext: string,
+): string {
+  const id = trackId.trim();
+  const rev = revisionId.trim();
+  const e = ext.replace(/^\./, "").toLowerCase().replace(/[^a-z0-9]+/g, "") || "wav";
+  if (!id || !rev) throw new Error("trackId and revisionId are required");
+  return `${vaultPrefix()}/${id}/mix-history/${rev}/original.${e}`;
+}
+
 /** Cached subscriber/guest eval mix. versionToken includes clip hash + source ETag. */
 export function vaultWatermarkedMp3Key(
   trackId: string,

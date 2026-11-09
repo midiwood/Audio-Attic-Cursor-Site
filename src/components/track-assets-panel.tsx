@@ -7,6 +7,12 @@ import {
   readDurationFromAudioUrl,
 } from "@/lib/audio-duration";
 import type { TrackAssetKind } from "@/lib/track-assets";
+import {
+  mp3FileFromBlob,
+  normalizeFileToMinus16LufsMp3,
+  transcodeFileToPlaybackMp3,
+} from "@/lib/audio-normalize-client";
+import { waveformPeaksFromBlob } from "@/lib/waveform-peaks-client";
 import { hasPlayableAudio, mp3OnlyErrorMessage, titleFromFilename } from "@/lib/tracks";
 import { toTrackListItem, type TrackListItem } from "@/lib/track-list-item";
 import type { Track } from "@/db/schema";
@@ -24,6 +30,20 @@ export type TrackAssetRow = {
   sortOrder: number;
   createdAt: string;
 };
+
+type MixRevisionRow = {
+  id: string;
+  createdAt: string;
+  replacedWith: string | null;
+  replacedBy: string | null;
+  duration: string | null;
+};
+
+function formatMixWhen(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
 
 type AssetListItem = {
   key: string;
@@ -210,6 +230,8 @@ export function TrackAssetsPanel({
   const [mainMixDragOver, setMainMixDragOver] = useState(false);
   const [replacingMain, setReplacingMain] = useState(false);
   const [deletingAssetId, setDeletingAssetId] = useState<string | null>(null);
+  const [mixRevisions, setMixRevisions] = useState<MixRevisionRow[]>([]);
+  const [revertingRevisionId, setRevertingRevisionId] = useState<string | null>(null);
   const stemBusy = stemSubmitting || busyKind === "stem";
 
   const loadAssets = useCallback(async () => {
@@ -231,9 +253,28 @@ export function TrackAssetsPanel({
     }
   }, [trackId]);
 
+  const loadMixRevisions = useCallback(async () => {
+    if (!replaceMain) {
+      setMixRevisions([]);
+      return;
+    }
+    try {
+      const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/mix-revisions`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      setMixRevisions(Array.isArray(data.revisions) ? data.revisions : []);
+    } catch {
+      // Log is optional — replace still works.
+    }
+  }, [trackId, replaceMain]);
+
   useEffect(() => {
     void loadAssets();
   }, [loadAssets]);
+
+  useEffect(() => {
+    void loadMixRevisions();
+  }, [loadMixRevisions]);
 
   const versions = useMemo<AssetListItem[]>(
     () =>
@@ -285,28 +326,54 @@ export function TrackAssetsPanel({
     [current, trackId, toggle, playTrack, playableQueue],
   );
 
+  async function prepareAssetMp3(
+    kind: TrackAssetKind,
+    file: File,
+    onProgress: (line: string) => void,
+  ): Promise<File> {
+    const prepared =
+      kind === "version"
+        ? await normalizeFileToMinus16LufsMp3(file, { onProgress })
+        : await transcodeFileToPlaybackMp3(file, { onProgress });
+    return mp3FileFromBlob(prepared.mp3, file.name);
+  }
+
+  async function postAsset(
+    kind: TrackAssetKind,
+    original: File,
+    mp3: File,
+    label?: string,
+  ): Promise<TrackAssetRow | null> {
+    const form = new FormData();
+    form.append("kind", kind);
+    form.append("normalized", "1");
+    form.append("sourceHint", original.name);
+    form.append("audio", mp3, mp3.name);
+    if (kind === "stem" && label?.trim()) {
+      form.append("label", label.trim());
+    }
+
+    const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/assets`, {
+      method: "POST",
+      body: form,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || "Upload failed");
+    }
+    return (data.asset as TrackAssetRow | undefined) ?? null;
+  }
+
   async function uploadAsset(kind: TrackAssetKind, file: File): Promise<boolean> {
     setBusyKind(kind);
     setError("");
-    setMessage(kind === "version" ? "Normalizing version…" : "Uploading stem…");
-
-    const form = new FormData();
-    form.append("kind", kind);
-    form.append("audio", file, file.name);
+    setMessage(kind === "version" ? "Normalizing version in the browser…" : "Converting stem…");
 
     try {
-      const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/assets`, {
-        method: "POST",
-        body: form,
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error || "Upload failed");
-        setMessage("");
-        return false;
-      }
+      const mp3 = await prepareAssetMp3(kind, file, (line) => setMessage(line));
+      setMessage(kind === "version" ? "Uploading version…" : "Uploading stem…");
+      const asset = await postAsset(kind, file, mp3);
 
-      const asset = data.asset as TrackAssetRow | undefined;
       if (asset?.dropboxPath) {
         const seconds = await readDurationFromAudioUrl(
           audioUrlFor(trackId, asset.id),
@@ -319,8 +386,8 @@ export function TrackAssetsPanel({
       setMessage(kind === "version" ? "Version added" : "Stem added");
       await loadAssets();
       return true;
-    } catch {
-      setError("Upload failed");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
       setMessage("");
       return false;
     } finally {
@@ -332,12 +399,33 @@ export function TrackAssetsPanel({
     if (replacingMain || busyKind !== null) return;
     setReplacingMain(true);
     setError("");
-    setMessage("Replacing main mix (normalizing to −16 LUFS)…");
-
-    const form = new FormData();
-    form.append("audio", file, file.name);
+    setMessage("Normalizing main mix to −16 LUFS in the browser…");
 
     try {
+      const normalized = await normalizeFileToMinus16LufsMp3(file, {
+        onProgress: (line) => setMessage(line),
+      });
+      const mp3File = new File(
+        [normalized.mp3],
+        `${trackId}.mp3`,
+        { type: "audio/mpeg" },
+      );
+
+      setMessage("Building waveform…");
+      const waveform = await waveformPeaksFromBlob(normalized.mp3);
+
+      setMessage("Uploading replaced main mix…");
+      const form = new FormData();
+      form.append("normalized", "1");
+      form.append("audio", mp3File, mp3File.name);
+      form.append("master", normalized.master, normalized.master.name);
+      if (waveform) {
+        form.append(
+          "waveform",
+          JSON.stringify({ peaks: waveform.peaks, duration: waveform.duration }),
+        );
+      }
+
       const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/replace-audio`, {
         method: "POST",
         body: form,
@@ -349,9 +437,11 @@ export function TrackAssetsPanel({
         return;
       }
       setMessage("Main mix replaced. Play the track again to hear it.");
+      if (Array.isArray(data.revisions)) setMixRevisions(data.revisions);
+      else void loadMixRevisions();
       onMainMixReplaced?.(toTrackListItem(data.track as Track));
-    } catch {
-      setError("Could not replace main mix");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not replace main mix");
       setMessage("");
     } finally {
       setReplacingMain(false);
@@ -365,31 +455,56 @@ export function TrackAssetsPanel({
       return;
     }
     const ok = window.confirm(
-      `Replace the catalog mix for “${trackTitle}” with ${file.name}?\n\nThis overwrites the vault MP3.`,
+      `Replace the catalog mix for “${trackTitle}” with ${file.name}?\n\nThe current mix is saved in the replace log so you can revert.`,
     );
     if (!ok) return;
     void replaceMainMix(file);
   }
 
-  async function uploadStem(file: File, label: string): Promise<boolean> {
-    const form = new FormData();
-    form.append("kind", "stem");
-    form.append("label", label.trim());
-    form.append("audio", file, file.name);
-
+  async function revertMix(revision: MixRevisionRow) {
+    if (replacingMain || revertingRevisionId || busyKind !== null) return;
+    const when = formatMixWhen(revision.createdAt);
+    const ok = window.confirm(
+      `Revert to the mix saved ${when}?\n\nThe current mix will be kept in this log.`,
+    );
+    if (!ok) return;
+    setRevertingRevisionId(revision.id);
+    setError("");
+    setMessage("Restoring previous mix…");
     try {
-      const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/assets`, {
+      const res = await fetch(`/api/tracks/${encodeURIComponent(trackId)}/mix-revisions`, {
         method: "POST",
-        body: form,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ revisionId: revision.id }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error || `Upload failed for ${label.trim()}`);
-        return false;
+      if (!res.ok || !data.track) {
+        setError(data.error || "Could not revert mix");
+        setMessage("");
+        return;
       }
+      if (Array.isArray(data.revisions)) setMixRevisions(data.revisions);
+      setMessage("Previous mix restored. Play the track again to hear it.");
+      onMainMixReplaced?.(toTrackListItem(data.track as Track));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not revert mix");
+      setMessage("");
+    } finally {
+      setRevertingRevisionId(null);
+    }
+  }
+
+  async function uploadStem(file: File, label: string): Promise<boolean> {
+    try {
+      const mp3 = await prepareAssetMp3("stem", file, (line) => setMessage(line));
+      await postAsset("stem", file, mp3, label);
       return true;
-    } catch {
-      setError(`Upload failed for ${label.trim()}`);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : `Upload failed for ${label.trim()}`,
+      );
       return false;
     }
   }
@@ -436,7 +551,7 @@ export function TrackAssetsPanel({
 
     for (let i = 0; i < pendingStems.length; i++) {
       const stem = pendingStems[i];
-      setMessage(`Uploading stem ${i + 1} of ${pendingStems.length}…`);
+      setMessage(`Preparing stem ${i + 1} of ${pendingStems.length}…`);
       const ok = await uploadStem(stem.file, stem.label);
       if (ok) {
         uploaded += 1;
@@ -509,7 +624,8 @@ export function TrackAssetsPanel({
     }
   }
 
-  const uploadsBusy = replacingMain || busyKind !== null || stemBusy;
+  const uploadsBusy =
+    replacingMain || busyKind !== null || stemBusy || revertingRevisionId !== null;
   const hasAssets = versions.length > 0 || stems.length > 0;
 
   if (!canEdit && !replaceMain && !loading && !hasAssets) {
@@ -575,6 +691,43 @@ export function TrackAssetsPanel({
           >
             {replacingMain ? "Replacing…" : "Choose file"}
           </button>
+        </div>
+      ) : null}
+
+      {replaceMain && mixRevisions.length > 0 ? (
+        <div className="mt-3">
+          <h4 className="text-[10px] font-medium uppercase tracking-[0.14em] text-[var(--ink-dim)]">
+            Mix replace log
+          </h4>
+          <ul className="mt-2 space-y-1.5">
+            {mixRevisions.map((revision) => (
+              <li
+                key={revision.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--line)] bg-[var(--bg)] px-2.5 py-1.5"
+              >
+                <div className="min-w-0 text-[11px] leading-snug">
+                  <p className="text-[var(--ink)]">{formatMixWhen(revision.createdAt)}</p>
+                  <p className="truncate text-[var(--ink-dim)]">
+                    {revision.replacedWith === "Reverted"
+                      ? "Then reverted"
+                      : revision.replacedWith
+                        ? `Replaced with ${revision.replacedWith}`
+                        : "Previous mix"}
+                    {revision.replacedBy ? ` · ${revision.replacedBy}` : ""}
+                    {revision.duration ? ` · ${revision.duration}` : ""}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={uploadsBusy}
+                  onClick={() => void revertMix(revision)}
+                  className="shrink-0 rounded-md border border-[var(--line)] px-2 py-1 text-[11px] text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
+                >
+                  {revertingRevisionId === revision.id ? "Reverting…" : "Revert"}
+                </button>
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
 
@@ -662,7 +815,7 @@ export function TrackAssetsPanel({
           >
             <p className="text-xs font-medium text-[var(--ink)]">Add version</p>
             <p className="mt-0.5 text-[11px] text-[var(--ink-dim)]">
-              Drop MP3, WAV, or AIFF — labeled Version1, Version2…
+              Drop MP3, WAV, or AIFF — browser −16 LUFS, labeled Version1, Version2…
             </p>
             <input
               ref={versionInputRef}
@@ -709,7 +862,7 @@ export function TrackAssetsPanel({
           >
             <p className="text-xs font-medium text-[var(--ink)]">Add stems</p>
             <p className="mt-0.5 text-[11px] text-[var(--ink-dim)]">
-              Drop or browse multiple MP3, WAV, or AIFF files — name each stem, then submit
+              Drop or browse multiple MP3, WAV, or AIFF files — converted in the browser, name each stem, then submit
             </p>
             <input
               ref={stemInputRef}
