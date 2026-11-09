@@ -35,6 +35,7 @@ type ListFilter = "active" | "archive" | "trash";
 
 type SubmissionAction =
   | "complete"
+  | "uncomplete"
   | "cancel"
   | "trash"
   | "archive"
@@ -73,6 +74,11 @@ const ACTION_PROMPTS: Record<
     message:
       "Mark this SWI as submitted to Capasso? Each linked track will get Capasso = Yes.",
     confirmLabel: "Mark complete",
+  },
+  uncomplete: {
+    message:
+      "Undo Mark complete? Linked tracks go back to Capasso = No unless they are on another completed form. This form returns to the active list.",
+    confirmLabel: "Undo complete",
   },
   cancel: {
     message: "Cancel this form? Tracks stay unsubmitted.",
@@ -173,7 +179,8 @@ export function CapassoSubmissionsManager({
       setExpandedId(null);
     }
     await refresh();
-    if (action === "complete") router.refresh();
+    if (action === "complete" || action === "uncomplete") router.refresh();
+    if (action === "uncomplete") setFilter("active");
   }
 
   async function executePending() {
@@ -346,6 +353,16 @@ export function CapassoSubmissionsManager({
                           >
                             Download
                           </a>
+                          {row.status === "completed" ? (
+                            <button
+                              type="button"
+                              disabled={busyId === row.id}
+                              onClick={() => queueConfirm(row.id, "uncomplete")}
+                              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
+                            >
+                              Undo complete
+                            </button>
+                          ) : null}
                           <button
                             type="button"
                             disabled={busyId === row.id}
@@ -386,14 +403,24 @@ export function CapassoSubmissionsManager({
                             </button>
                           ) : null}
                           {row.status === "completed" ? (
-                            <button
-                              type="button"
-                              disabled={busyId === row.id}
-                              onClick={() => queueConfirm(row.id, "archive")}
-                              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
-                            >
-                              Archive
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                disabled={busyId === row.id}
+                                onClick={() => queueConfirm(row.id, "uncomplete")}
+                                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
+                              >
+                                Undo complete
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busyId === row.id}
+                                onClick={() => queueConfirm(row.id, "archive")}
+                                className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-[var(--ink-muted)] transition hover:border-[var(--accent)] hover:text-[var(--ink)] disabled:opacity-50"
+                              >
+                                Archive
+                              </button>
+                            </>
                           ) : (
                             <button
                               type="button"
